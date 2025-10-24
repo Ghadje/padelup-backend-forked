@@ -1,0 +1,24 @@
+{
+  "name": "PadelZone Club Barcelona",
+  "address": "Carrer de Marina, 123",
+  "city": "Barcelona",
+  "postal_code": "08013",
+  "latitude": 41.3874,
+  "longitude": 2.1686,
+  "phone": "+34 932 123 456",
+  "email": "info@padelzonebcn.com",
+  "website": "https://padelzone.com",
+  "opening_hours": {
+    "monday": "08:00-22:00",
+    "tuesday": "08:00-22:00",
+    "wednesday": "08:00-22:00",
+    "thursday": "08:00-22:00",
+    "friday": "08:00-23:00",
+    "saturday": "09:00-23:00",
+    "sunday": "09:00-21:00"
+  },
+  "amenities": ["Parking", "Lockers", "Showers", "Shop", "Restaurant", "WiFi"],
+  "price_min": 20.0,
+  "price_max": 60.0,
+  "is_partner": true
+}

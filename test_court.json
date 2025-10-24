@@ -1,0 +1,15 @@
+{
+  "club": 1,
+  "name": "Court 1 - Glass",
+  "court_type": "glass",
+  "is_indoor": true,
+  "is_available": true,
+  "price_per_hour": 35.0,
+  "features": ["LED Lighting", "Air Conditioning", "Premium Surface"],
+  "prices": {
+    "morning": 30,
+    "afternoon": 35,
+    "evening": 40,
+    "weekend": 45
+  }
+}

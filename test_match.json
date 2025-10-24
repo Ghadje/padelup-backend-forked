@@ -1,0 +1,15 @@
+{
+  "organizer": 2,
+  "title": "Friendly Padel Game - Evening Session",
+  "description": "Looking for intermediate players for a friendly match",
+  "match_type": "casual",
+  "club": 1,
+  "court": 1,
+  "date_time": "2025-10-20T18:00:00",
+  "duration": 90,
+  "max_players": 4,
+  "min_skill_level": 3,
+  "max_skill_level": 7,
+  "price_per_player": 12.50,
+  "is_public": true
+}
