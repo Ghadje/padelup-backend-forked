@@ -1,8 +1,8 @@
-django
+django==4.2.10
 djangorestframework
 django-cors-headers
 pillow
-ollama
-langchain-core
-langchain-ollama
-langchain-chroma
+gunicorn
+dj-database-url
+psycopg2-binary
+whitenoise[brotli]
