@@ -29,6 +29,11 @@ class Profile(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(10)],
         default=5
     )
+    EVALUATION_TYPE_CHOICES = [
+        ('new', 'New (1-8)'),
+        ('old', 'Old (1-10)'),
+    ]
+    evaluation_type = models.CharField(max_length=10, choices=EVALUATION_TYPE_CHOICES, default='new')
     is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -311,6 +316,17 @@ class Match(models.Model):
     max_players = models.IntegerField(default=4, validators=[MinValueValidator(2), MaxValueValidator(4)])
     min_skill_level = models.IntegerField(default=1, validators=[MinValueValidator(1), MaxValueValidator(10)])
     max_skill_level = models.IntegerField(default=10, validators=[MinValueValidator(1), MaxValueValidator(10)])
+
+    # Dual evaluation grille support
+    EVALUATION_TYPE_CHOICES = [
+        ('new', 'New (1-8)'),
+        ('old', 'Old (1-10)'),
+    ]
+    evaluation_type = models.CharField(max_length=10, choices=EVALUATION_TYPE_CHOICES, default='new')
+    min_skill_level_new = models.IntegerField(default=1, validators=[MinValueValidator(1), MaxValueValidator(8)])
+    max_skill_level_new = models.IntegerField(default=8, validators=[MinValueValidator(1), MaxValueValidator(8)])
+    min_skill_level_old = models.IntegerField(default=1, validators=[MinValueValidator(1), MaxValueValidator(10)])
+    max_skill_level_old = models.IntegerField(default=10, validators=[MinValueValidator(1), MaxValueValidator(10)])
 
     # Pricing
     price_per_player = models.DecimalField(max_digits=6, decimal_places=2, default=0.00)

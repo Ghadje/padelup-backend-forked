@@ -469,6 +469,11 @@ class BookingListView(APIView):
                 return Response({'error': 'Time slot already booked'}, status=status.HTTP_400_BAD_REQUEST)
 
             booking = serializer.save(user=request.user)
+
+            # Send confirmation email
+            from .email_service import send_booking_confirmation
+            send_booking_confirmation(request.user, booking)
+
             return Response(BookingSerializer(booking).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -580,7 +585,14 @@ class MatchListView(APIView):
 
         if skill_level and skill_level.isdigit():
             level = int(skill_level)
-            matches = matches.filter(min_skill_level__lte=level, max_skill_level__gte=level)
+            # Use the appropriate scale based on user's evaluation type
+            user_eval_type = 'new'
+            if request.user.is_authenticated and hasattr(request.user, 'profile'):
+                user_eval_type = request.user.profile.evaluation_type
+            if user_eval_type == 'old':
+                matches = matches.filter(min_skill_level_old__lte=level, max_skill_level_old__gte=level)
+            else:
+                matches = matches.filter(min_skill_level_new__lte=level, max_skill_level_new__gte=level)
 
         # Add search functionality (search by club name or location)
         if search:
@@ -631,6 +643,21 @@ class MatchListView(APIView):
         serializer = MatchSerializer(data=request.data)
         if serializer.is_valid():
             match = serializer.save(organizer=request.user)
+
+            # Auto-compute dual grille skill levels
+            eval_type = match.evaluation_type or 'new'
+            if eval_type == 'new':
+                match.min_skill_level_new = match.min_skill_level
+                match.max_skill_level_new = match.max_skill_level
+                match.min_skill_level_old = max(1, round(match.min_skill_level * 10 / 8))
+                match.max_skill_level_old = max(1, round(match.max_skill_level * 10 / 8))
+            else:
+                match.min_skill_level_old = match.min_skill_level
+                match.max_skill_level_old = match.max_skill_level
+                match.min_skill_level_new = max(1, round(match.min_skill_level * 8 / 10))
+                match.max_skill_level_new = max(1, round(match.max_skill_level * 8 / 10))
+            match.save()
+
             # Pass context when serializing the response
             response_serializer = MatchSerializer(match, context={'request': request})
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
@@ -731,9 +758,16 @@ class MatchJoinView(APIView):
             if match.status != 'open':
                 return Response({'error': 'Match is not open for joining'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Check skill level
+            # Check skill level using user's evaluation type
             user_skill = request.user.profile.skill_level if hasattr(request.user, 'profile') else 5
-            if user_skill < match.min_skill_level or user_skill > match.max_skill_level:
+            user_eval_type = request.user.profile.evaluation_type if hasattr(request.user, 'profile') else 'new'
+            if user_eval_type == 'old':
+                min_level = match.min_skill_level_old
+                max_level = match.max_skill_level_old
+            else:
+                min_level = match.min_skill_level_new
+                max_level = match.max_skill_level_new
+            if user_skill < min_level or user_skill > max_level:
                 return Response({'error': 'Your skill level does not match requirements'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Check if already joined
@@ -767,6 +801,10 @@ class MatchJoinView(APIView):
                 match=match,
                 message=f'{request.user.username} joined your match "{match.title}"'
             )
+
+            # Send confirmation email
+            from .email_service import send_match_join_confirmation
+            send_match_join_confirmation(request.user, match)
 
             return Response(MatchParticipantSerializer(participant).data, status=status.HTTP_201_CREATED)
         except Match.DoesNotExist:
@@ -1632,6 +1670,7 @@ class UserSearchView(APIView):
                 'full_name': f"{user.first_name} {user.last_name}".strip(),
                 'avatar': user.profile.avatar.url if hasattr(user, 'profile') and user.profile.avatar else None,
                 'skill_level': user.profile.skill_level if hasattr(user, 'profile') else None,
+                'evaluation_type': user.profile.evaluation_type if hasattr(user, 'profile') else 'new',
                 'is_friend': Friendship.are_friends(request.user, user),
                 'has_pending_request': FriendRequest.objects.filter(
                     Q(sender=request.user, receiver=user, status='pending') |

@@ -46,7 +46,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         model = Profile
         fields = [
             'id', 'user', 'full_name', 'phone_number', 'avatar', 'avatar_url',
-            'bio', 'location', 'skill_level', 'is_verified',
+            'bio', 'location', 'skill_level', 'evaluation_type', 'is_verified',
             'public_skill_level', 'total_skill_ratings', 'rating_points', 'tier_level', 'tier_name',
             'created_at', 'updated_at'
         ]
@@ -174,15 +174,16 @@ class MatchParticipantSerializer(serializers.ModelSerializer):
     userName = serializers.CharField(source='user.username', read_only=True)
     userAvatar = serializers.SerializerMethodField()
     userSkillLevel = serializers.SerializerMethodField()
+    userEvaluationType = serializers.SerializerMethodField()
 
     class Meta:
         model = MatchParticipant
         fields = [
             'id', 'match', 'user', 'user_name', 'user_info', 'status', 'status_display',
             'amount_paid', 'payment_status', 'payment_intent_id', 'joined_at',
-            'userId', 'userName', 'userAvatar', 'userSkillLevel'
+            'userId', 'userName', 'userAvatar', 'userSkillLevel', 'userEvaluationType'
         ]
-        read_only_fields = ['id', 'user_name', 'user_info', 'status_display', 'joined_at', 'userId', 'userName', 'userAvatar', 'userSkillLevel']
+        read_only_fields = ['id', 'user_name', 'user_info', 'status_display', 'joined_at', 'userId', 'userName', 'userAvatar', 'userSkillLevel', 'userEvaluationType']
 
     def get_user_info(self, obj):
         if obj.user:
@@ -190,6 +191,7 @@ class MatchParticipantSerializer(serializers.ModelSerializer):
                 'id': obj.user.id,
                 'username': obj.user.username,
                 'skill_level': obj.user.profile.skill_level if hasattr(obj.user, 'profile') else None,
+                'evaluation_type': obj.user.profile.evaluation_type if hasattr(obj.user, 'profile') else 'new',
                 'avatar': obj.user.profile.avatar.url if hasattr(obj.user, 'profile') and obj.user.profile.avatar else None
             }
         return None
@@ -220,6 +222,12 @@ class MatchParticipantSerializer(serializers.ModelSerializer):
             return obj.user.profile.skill_level
         return None
 
+    def get_userEvaluationType(self, obj):
+        """Get user evaluation type for Flutter"""
+        if obj.user and hasattr(obj.user, 'profile'):
+            return obj.user.profile.evaluation_type
+        return 'new'
+
 
 class MatchSerializer(serializers.ModelSerializer):
     """Match serializer"""
@@ -245,6 +253,8 @@ class MatchSerializer(serializers.ModelSerializer):
             'date', 'start_time', 'end_time',  # Backward compatibility
             'organizer', 'organizer_name', 'organizer_info', 'max_players',
             'min_skill_level', 'max_skill_level', 'price_per_player', 'currency',
+            'evaluation_type', 'min_skill_level_new', 'max_skill_level_new',
+            'min_skill_level_old', 'max_skill_level_old',
             'status', 'is_public', 'is_open', 'share_code', 'share_link',
             'participants', 'participants_count', 'location', 'winners', 'losers',
             'created_at', 'updated_at'
@@ -274,6 +284,7 @@ class MatchSerializer(serializers.ModelSerializer):
             'id': obj.organizer.id,
             'username': obj.organizer.username,
             'skill_level': obj.organizer.profile.skill_level if hasattr(obj.organizer, 'profile') else None,
+            'evaluation_type': obj.organizer.profile.evaluation_type if hasattr(obj.organizer, 'profile') else 'new',
             'avatar': avatar_url
         }
 
@@ -543,6 +554,7 @@ class FriendRequestSerializer(serializers.ModelSerializer):
             profile = obj.sender.profile
             return {
                 'skill_level': profile.skill_level,
+                'evaluation_type': profile.evaluation_type,
                 'avatar': profile.avatar.url if profile.avatar else None
             }
         except:
@@ -553,6 +565,7 @@ class FriendRequestSerializer(serializers.ModelSerializer):
             profile = obj.receiver.profile
             return {
                 'skill_level': profile.skill_level,
+                'evaluation_type': profile.evaluation_type,
                 'avatar': profile.avatar.url if profile.avatar else None
             }
         except:
@@ -577,6 +590,7 @@ class FriendshipSerializer(serializers.ModelSerializer):
                 'username': friend.username,
                 'email': friend.email,
                 'skill_level': friend.profile.skill_level if hasattr(friend, 'profile') else None,
+                'evaluation_type': friend.profile.evaluation_type if hasattr(friend, 'profile') else 'new',
                 'avatar': friend.profile.avatar.url if hasattr(friend, 'profile') and friend.profile.avatar else None
             }
         return None
@@ -711,7 +725,7 @@ class ProfileSetupSerializer(serializers.ModelSerializer):
     """Profile setup after registration"""
     class Meta:
         model = Profile
-        fields = ['avatar', 'location', 'bio', 'skill_level']
+        fields = ['avatar', 'location', 'bio', 'skill_level', 'evaluation_type']
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
@@ -724,7 +738,7 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         model = Profile
         fields = [
             'phone_number', 'full_name', 'avatar', 'bio', 'location',
-            'skill_level', 'user_first_name', 'user_last_name', 'user_email'
+            'skill_level', 'evaluation_type', 'user_first_name', 'user_last_name', 'user_email'
         ]
 
     def update(self, instance, validated_data):
