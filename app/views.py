@@ -200,6 +200,9 @@ class ProfileView(APIView):
                     if resp_data.get('status_code') == 200:
                         image_url = resp_data['image']['url']
                         data['external_avatar_url'] = image_url
+                        # Clear old local avatar field
+                        profile.avatar = None
+                        profile.save(update_fields=['avatar'])
                     else:
                         return Response(
                             {'detail': 'Image upload failed'},

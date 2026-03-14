@@ -53,13 +53,13 @@ class ProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'user', 'public_skill_level', 'total_skill_ratings', 'rating_points', 'tier_level', 'tier_name', 'created_at', 'updated_at']
 
     def get_avatar_url(self, obj):
+        if obj.external_avatar_url:
+            return obj.external_avatar_url
         if obj.avatar:
             request = self.context.get('request')
             if request:
                 return request.build_absolute_uri(obj.avatar.url)
             return obj.avatar.url
-        if obj.external_avatar_url:
-            return obj.external_avatar_url
         return None
 
     def get_tier_name(self, obj):
