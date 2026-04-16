@@ -9,8 +9,8 @@ services:
     name: padelup-api
     plan: free
     runtime: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python -c 'import os; from http.server import HTTPServer, BaseHTTPRequestHandler; print(\"STARTING\", flush=True); HTTPServer((\"0.0.0.0\", int(os.environ.get(\"PORT\", 8000))), BaseHTTPRequestHandler).serve_forever()'"
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn backend.wsgi:application"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -24,5 +24,3 @@ services:
         value: "3.11.6"
       - key: ALLOWED_HOSTS
         value: ".onrender.com"
-      - key: WEB_CONCURRENCY
-        value: "1"
