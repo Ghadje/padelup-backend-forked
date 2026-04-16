@@ -37,17 +37,18 @@ CORS_ALLOW_CREDENTIALS = True
 # Application definition
 
 INSTALLED_APPS = [
-    'rest_framework',
-    'corsheaders',
-    'rest_framework.authtoken',
-
-    'app',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    'rest_framework',
+    'rest_framework.authtoken',
+    'corsheaders',
+
+    'app',
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -159,6 +160,28 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
+
+# Logging - ensure errors are visible in Render logs
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
 
 # SendGrid Email Configuration
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY', '')

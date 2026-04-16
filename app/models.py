@@ -853,7 +853,7 @@ def create_user_stats(sender, instance, created, **kwargs):
         PlayerStats.objects.get_or_create(user=instance)
 
 @receiver(post_save, sender=User)
-def save_user_profile(sender, instance, **kwargs):
-    """Save Profile when user is saved"""
-    if hasattr(instance, 'profile'):
+def save_user_profile(sender, instance, created, **kwargs):
+    """Save Profile when user is saved (skip on creation, handled by create_user_profile)"""
+    if not created and hasattr(instance, 'profile'):
         instance.profile.save()
