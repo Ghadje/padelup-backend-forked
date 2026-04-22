@@ -123,6 +123,7 @@ class ClubSerializer(serializers.ModelSerializer):
     courts = CourtSerializer(many=True, read_only=True)
     distance = serializers.SerializerMethodField()
     price_range = serializers.SerializerMethodField()
+    primary_photo = serializers.SerializerMethodField()
 
     class Meta:
         model = Club
@@ -133,7 +134,19 @@ class ClubSerializer(serializers.ModelSerializer):
             'currency', 'is_partner', 'courts', 'distance', 'price_range',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'review_count', 'distance', 'price_range', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'review_count', 'distance', 'price_range', 'primary_photo', 'created_at', 'updated_at']
+
+    def get_primary_photo(self, obj):
+        """Return the first cloud-hosted image URL, or the local ImageField URL as fallback."""
+        if obj.images:
+            return obj.images[0]
+        if obj.primary_photo:
+            request = self.context.get('request')
+            url = obj.primary_photo.url
+            if request is not None:
+                return request.build_absolute_uri(url)
+            return url
+        return None
 
     def get_distance(self, obj):
         request = self.context.get('request')

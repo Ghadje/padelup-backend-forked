@@ -14,6 +14,33 @@ from datetime import datetime, timedelta
 
 FREEIMAGE_API_KEY = '6d207e02198a847aa98d0a2a901485a5'
 
+
+def _upload_image_to_freeimage(uploaded_file):
+    """Upload an image file to Freeimage.host and return its URL, or None on failure."""
+    try:
+        file_content = uploaded_file.read()
+        b64_image = base64.b64encode(file_content).decode('utf-8')
+        resp = http_requests.post(
+            'https://freeimage.host/api/1/upload',
+            data={
+                'key': FREEIMAGE_API_KEY,
+                'action': 'upload',
+                'source': b64_image,
+                'format': 'json',
+            },
+            timeout=30,
+        )
+        if resp.status_code == 200:
+            resp_data = resp.json()
+            if resp_data.get('status_code') == 200:
+                return resp_data['image']['url']
+            logger.warning(f"Freeimage upload rejected: {resp_data}")
+        else:
+            logger.warning(f"Freeimage upload non-200: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        logger.warning(f"Freeimage upload failed: {e}")
+    return None
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -494,10 +521,19 @@ class ClubListView(APIView):
     def post(self, request):
         """Create a new club (admin dashboard)"""
         # Allow creation from admin dashboard without authentication
-        serializer = ClubSerializer(data=request.data)
+        # Build plain dict so we can modify it safely without deep-copying file uploads
+        data = {k: v for k, v in request.data.items() if k != 'primary_photo'}
+
+        serializer = ClubSerializer(data=data)
         if serializer.is_valid():
             club = serializer.save()
-            return Response(ClubSerializer(club).data, status=status.HTTP_201_CREATED)
+            # Handle optional primary_photo upload to Freeimage
+            if 'primary_photo' in request.FILES:
+                url = _upload_image_to_freeimage(request.FILES['primary_photo'])
+                if url:
+                    club.images = [url] + (club.images or [])
+                    club.save(update_fields=['images'])
+            return Response(ClubSerializer(club, context={'request': request}).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -518,25 +554,50 @@ class ClubDetailView(APIView):
         """Update club (admin dashboard)"""
         try:
             club = Club.objects.get(id=club_id)
-            serializer = ClubSerializer(club, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Club.DoesNotExist:
             return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        data = {k: v for k, v in request.data.items() if k != 'primary_photo'}
+        serializer = ClubSerializer(club, data=data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            if 'primary_photo' in request.FILES:
+                url = _upload_image_to_freeimage(request.FILES['primary_photo'])
+                if url:
+                    club.images = [url] + [u for u in (club.images or []) if u != url]
+                    club.save(update_fields=['images'])
+            return Response(ClubSerializer(club, context={'request': request}).data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def patch(self, request, club_id):
         """Patch club (for image uploads from admin dashboard)"""
         try:
             club = Club.objects.get(id=club_id)
-            serializer = ClubSerializer(club, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Club.DoesNotExist:
             return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if 'primary_photo' in request.FILES:
+            url = _upload_image_to_freeimage(request.FILES['primary_photo'])
+            if not url:
+                return Response(
+                    {'detail': 'Image upload to hosting service failed'},
+                    status=status.HTTP_502_BAD_GATEWAY
+                )
+            club.images = [url] + [u for u in (club.images or []) if u != url]
+            club.save(update_fields=['images'])
+
+        data = {k: v for k, v in request.data.items() if k != 'primary_photo'}
+        if data:
+            serializer = ClubSerializer(club, data=data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            ClubSerializer(club, context={'request': request}).data,
+            status=status.HTTP_200_OK
+        )
 
     def delete(self, request, club_id):
         """Delete club (admin dashboard)"""
