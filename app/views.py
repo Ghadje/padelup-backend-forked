@@ -1,7 +1,11 @@
 import base64
+import logging
+import traceback
 import requests as http_requests
 
 from django.contrib.auth import authenticate, login, logout
+
+logger = logging.getLogger(__name__)
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404
 from django.db.models import Q, Avg, Count
@@ -199,42 +203,51 @@ class ProfileSetupView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        profile = request.user.profile
-        data = request.data.copy()
+        try:
+            profile = request.user.profile
+            data = request.data.copy()
 
-        # Upload avatar to Freeimage.host if provided
-        if 'avatar' in request.FILES:
-            uploaded_file = request.FILES['avatar']
-            try:
-                file_content = uploaded_file.read()
-                b64_image = base64.b64encode(file_content).decode('utf-8')
-                resp = http_requests.post(
-                    'https://freeimage.host/api/1/upload',
-                    data={
-                        'key': FREEIMAGE_API_KEY,
-                        'action': 'upload',
-                        'source': b64_image,
-                        'format': 'json',
-                    },
-                    timeout=30,
-                )
-                if resp.status_code == 200:
-                    resp_data = resp.json()
-                    if resp_data.get('status_code') == 200:
-                        profile.external_avatar_url = resp_data['image']['url']
-                        profile.save(update_fields=['external_avatar_url'])
-            except Exception:
-                pass  # Non-critical, profile setup can proceed without avatar
-            data.pop('avatar', None)
+            # Upload avatar to Freeimage.host if provided
+            if 'avatar' in request.FILES:
+                uploaded_file = request.FILES['avatar']
+                try:
+                    file_content = uploaded_file.read()
+                    b64_image = base64.b64encode(file_content).decode('utf-8')
+                    resp = http_requests.post(
+                        'https://freeimage.host/api/1/upload',
+                        data={
+                            'key': FREEIMAGE_API_KEY,
+                            'action': 'upload',
+                            'source': b64_image,
+                            'format': 'json',
+                        },
+                        timeout=30,
+                    )
+                    if resp.status_code == 200:
+                        resp_data = resp.json()
+                        if resp_data.get('status_code') == 200:
+                            profile.external_avatar_url = resp_data['image']['url']
+                            profile.save(update_fields=['external_avatar_url'])
+                    else:
+                        logger.warning(f"Freeimage upload non-200: {resp.status_code} {resp.text[:200]}")
+                except Exception as e:
+                    logger.warning(f"Freeimage upload failed: {e}")
+                data.pop('avatar', None)
 
-        serializer = ProfileSetupSerializer(profile, data=data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({
-                'profile': ProfileSerializer(profile).data,
-                'message': 'Profile setup completed'
-            }, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            serializer = ProfileSetupSerializer(profile, data=data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    'profile': ProfileSerializer(profile).data,
+                    'message': 'Profile setup completed'
+                }, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"ProfileSetupView error: {e}\n{traceback.format_exc()}")
+            return Response(
+                {'detail': f'Server error: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 # ============================================================================
