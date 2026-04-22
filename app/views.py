@@ -205,7 +205,14 @@ class ProfileSetupView(APIView):
     def post(self, request):
         try:
             profile = request.user.profile
-            data = request.data.copy()
+
+            # Build a plain dict of form fields (exclude file — can't be deep-copied
+            # by the serializer, and we handle the upload separately)
+            data = {
+                key: request.data.get(key)
+                for key in ('location', 'bio', 'skill_level', 'evaluation_type')
+                if key in request.data
+            }
 
             # Upload avatar to Freeimage.host if provided
             if 'avatar' in request.FILES:
@@ -232,7 +239,6 @@ class ProfileSetupView(APIView):
                         logger.warning(f"Freeimage upload non-200: {resp.status_code} {resp.text[:200]}")
                 except Exception as e:
                     logger.warning(f"Freeimage upload failed: {e}")
-                data.pop('avatar', None)
 
             serializer = ProfileSetupSerializer(profile, data=data, partial=True)
             if serializer.is_valid():
@@ -270,10 +276,18 @@ class ProfileView(APIView):
     def put(self, request):
         """Update current user's profile"""
         profile = request.user.profile
-        data = request.data.copy()
+
+        # Build a plain dict of form fields (exclude file — handled separately
+        # to avoid deep-copy of disk-backed uploads)
+        allowed_fields = (
+            'phone_number', 'full_name', 'bio', 'location',
+            'skill_level', 'evaluation_type', 'external_avatar_url',
+            'user_first_name', 'user_last_name', 'user_email',
+        )
+        data = {key: request.data.get(key) for key in allowed_fields if key in request.data}
 
         # Handle avatar_url (e.g. DiceBear URL) sent as a text field
-        avatar_url = data.pop('avatar_url', None)
+        avatar_url = request.data.get('avatar_url')
         if isinstance(avatar_url, list):
             avatar_url = avatar_url[0] if avatar_url else None
         if avatar_url:
@@ -318,8 +332,6 @@ class ProfileView(APIView):
                     {'detail': f'Image upload error: {str(e)}'},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
-            # Remove avatar from data so serializer doesn't try to save file
-            data.pop('avatar', None)
 
         serializer = ProfileUpdateSerializer(profile, data=data, partial=True)
         if serializer.is_valid():
