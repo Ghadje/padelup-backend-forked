@@ -1902,9 +1902,21 @@ class UserDetailManagementView(APIView):
 
             if 'profile' in request.data and hasattr(user, 'profile'):
                 p_data = request.data['profile']
-                for field in ['full_name', 'phone_number', 'skill_level', 'evaluation_type']:
+                profile_fields = [
+                    'full_name', 'phone_number', 'skill_level', 'evaluation_type', 
+                    'bio', 'location', 'is_verified', 'rating_points', 
+                    'tier_level', 'tier_name', 'public_skill_level'
+                ]
+                for field in profile_fields:
                     if field in p_data: setattr(user.profile, field, p_data[field])
                 user.profile.save()
+
+            if 'stats' in request.data and hasattr(user, 'stats'):
+                s_data = request.data['stats']
+                stats_fields = ['matches_played', 'matches_won', 'matches_lost', 'total_hours']
+                for field in stats_fields:
+                    if field in s_data: setattr(user.stats, field, s_data[field])
+                user.stats.save()
 
             serializer = UserDetailSerializer(user, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)

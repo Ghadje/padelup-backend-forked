@@ -8,4 +8,4 @@ notes applyed:
 - integrate the ability to send the authorization token for the api requests (front end use this token to request data)
 - Handle server errors and well display them to the user in the dashboard
 - Integrate players section with stats and details page
-
+- Integrate user creation, update, disable and delete in the dashboard
