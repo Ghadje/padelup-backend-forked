@@ -9,3 +9,8 @@ notes applyed:
 - Handle server errors and well display them to the user in the dashboard
 - Integrate players section with stats and details page
 - Integrate user creation, update, disable and delete in the dashboard
+- Fix the add/edit stadium modal: add price per hour for each court
+- Add availability toggle for each court, add court type select for each court 
+- fix confirmations popups for delete and add actions, from agly js alerts to beautiful shadcn ui popups
+- Integrate clubs section with details page of clubs
+- Integrate the ability to add, update, and delete clubs from the dashboard
