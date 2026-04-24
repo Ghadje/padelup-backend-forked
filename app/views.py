@@ -294,11 +294,8 @@ class ProfileView(APIView):
     def get(self, request):
         """Get current user's profile"""
         user = request.user
-        return Response({
-            'user': UserSerializer(user).data,
-            'profile': ProfileSerializer(user.profile, context={'request': request}).data if hasattr(user, 'profile') else None,
-            'stats': PlayerStatsSerializer(user.stats).data if hasattr(user, 'stats') else None
-        }, status=status.HTTP_200_OK)
+        serializer = UserDetailSerializer(user, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def put(self, request):
         """Update current user's profile"""
