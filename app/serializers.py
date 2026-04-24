@@ -696,7 +696,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'password', 'password2', 'email', 'first_name', 'last_name', 'full_name']
+        fields = ['username', 'password', 'password2', 'email', 'first_name', 'last_name', 'full_name', 'is_staff', 'is_active']
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
@@ -716,7 +716,9 @@ class RegisterSerializer(serializers.ModelSerializer):
             email=validated_data['email'],
             password=validated_data['password'],
             first_name=validated_data.get('first_name', ''),
-            last_name=validated_data.get('last_name', '')
+            last_name=validated_data.get('last_name', ''),
+            is_staff=validated_data.get('is_staff', False),
+            is_active=validated_data.get('is_active', True)
         )
 
         # Update profile with full name

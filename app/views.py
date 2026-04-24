@@ -1858,6 +1858,21 @@ class UserListView(APIView):
         serializer = UserDetailSerializer(users, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    def post(self, request):
+        """Create a new user"""
+        serializer = RegisterSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            # If profile data is provided, update it
+            if 'profile' in request.data and hasattr(user, 'profile'):
+                p_data = request.data['profile']
+                for field in ['full_name', 'phone_number', 'skill_level', 'evaluation_type']:
+                    if field in p_data: setattr(user.profile, field, p_data[field])
+                user.profile.save()
+            
+            return Response(UserDetailSerializer(user).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class UserDetailManagementView(APIView):
     """User detail management API for admin dashboard"""
@@ -1893,6 +1908,15 @@ class UserDetailManagementView(APIView):
 
             serializer = UserDetailSerializer(user, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self, request, user_id):
+        """Delete a user"""
+        try:
+            user = User.objects.get(id=user_id)
+            user.delete()
+            return Response({'message': 'User deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
