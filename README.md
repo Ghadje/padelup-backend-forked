@@ -17,3 +17,7 @@ notes applyed:
 - Integrate matches managements
 - Integrate the ability to view bookings, their details, and manage them (update status, payment status, add cancel)
 - Integrate dashboard home page with stats and shortcuts
+- update the ui for settings page, update the user profile
+- integrate update phone and email feature for user and password
+- Integrate sorters and flters for all tables
+- integrate pagination for all tables
