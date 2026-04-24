@@ -187,28 +187,24 @@ class PasswordResetConfirmView(APIView):
         new_password = request.data.get('new_password', '')
 
         if not email or not code or not new_password:
-            return Response(
-                {'detail': 'Email, code et nouveau mot de passe requis'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if len(new_password) < 8:
-            return Response(
-                {'detail': 'Le mot de passe doit contenir au moins 8 caractères'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'detail': 'Email, code et nouveau mot de passe requis'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            return Response({'detail': 'Code invalide ou expiré'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Utilisateur non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Find valid code
+        if len(new_password) < 8:
+            return Response({'detail': 'Le mot de passe doit contenir au moins 8 caractères'}, status=status.HTTP_400_BAD_REQUEST)
+
         reset_code = PasswordResetCode.objects.filter(
-            user=user, code=code, is_used=False
-        ).order_by('-created_at').first()
+            user=user, 
+            code=code, 
+            is_used=False,
+            created_at__gte=timezone.now() - timedelta(hours=1)
+        ).first()
 
-        if not reset_code or not reset_code.is_valid():
+        if not reset_code:
             return Response({'detail': 'Code invalide ou expiré'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Reset password
@@ -219,10 +215,31 @@ class PasswordResetConfirmView(APIView):
         reset_code.is_used = True
         reset_code.save()
 
-        # Delete existing tokens so user must login fresh
-        Token.objects.filter(user=user).delete()
+        return Response({'message': 'Mot de passe réinitialisé avec succès'}, status=status.HTTP_200_OK)
 
-        return Response({'message': 'Mot de passe réinitialisé avec succès'})
+
+class ChangePasswordView(APIView):
+    """Change password for authenticated user"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+
+        if not old_password or not new_password:
+            return Response({'error': 'Ancien et nouveau mot de passe requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        if not user.check_password(old_password):
+            return Response({'error': 'L\'ancien mot de passe est incorrect'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(new_password) < 8:
+            return Response({'error': 'Le nouveau mot de passe doit contenir au moins 8 caractères'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save()
+
+        return Response({'message': 'Mot de passe changé avec succès'}, status=status.HTTP_200_OK)
 
 
 class ProfileSetupView(APIView):

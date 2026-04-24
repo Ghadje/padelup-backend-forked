@@ -14,3 +14,6 @@ notes applyed:
 - fix confirmations popups for delete and add actions, from agly js alerts to beautiful shadcn ui popups
 - Integrate clubs section with details page of clubs
 - Integrate the ability to add, update, and delete clubs from the dashboard
+- Integrate matches managements
+- Integrate the ability to view bookings, their details, and manage them (update status, payment status, add cancel)
+- Integrate dashboard home page with stats and shortcuts
