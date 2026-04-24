@@ -1875,15 +1875,24 @@ class UserDetailManagementView(APIView):
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    def put(self, request, user_id):
+        return self.patch(request, user_id)
+
     def patch(self, request, user_id):
-        """Update user status (e.g., activate/deactivate)"""
         try:
             user = User.objects.get(id=user_id)
+            if 'username' in request.data: user.username = request.data['username']
+            if 'email' in request.data: user.email = request.data['email']
+            if 'first_name' in request.data: user.first_name = request.data['first_name']
+            if 'last_name' in request.data: user.last_name = request.data['last_name']
+            if 'is_active' in request.data: user.is_active = request.data['is_active']
+            user.save()
 
-            # Allow updating is_active status
-            if 'is_active' in request.data:
-                user.is_active = request.data['is_active']
-                user.save()
+            if 'profile' in request.data and hasattr(user, 'profile'):
+                p_data = request.data['profile']
+                for field in ['full_name', 'phone_number', 'skill_level', 'evaluation_type']:
+                    if field in p_data: setattr(user.profile, field, p_data[field])
+                user.profile.save()
 
             serializer = UserDetailSerializer(user, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
