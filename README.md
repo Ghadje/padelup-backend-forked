@@ -1,0 +1,11 @@
+notes applyed:
+- Change the ui of the dashboard: fix font, icons, sizes, colors, responsive for mobile
+- Fix the users table: add is_active and is_staff columns, add edit and delete buttons, add search bar, add filter by role, add filter by status
+- Fix the responsive of the dashboard
+- Add new feature: update users status and admin status
+- Update the api endpoint for user update 
+- Integrate login and logout page for the dashboard
+- integrate the ability to send the authorization token for the api requests (front end use this token to request data)
+- Handle server errors and well display them to the user in the dashboard
+- Integrate players section with stats and details page
+

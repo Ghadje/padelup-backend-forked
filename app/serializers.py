@@ -50,13 +50,15 @@ class UserSerializer(serializers.ModelSerializer):
 class ProfileSerializer(serializers.ModelSerializer):
     """User profile serializer"""
     user = UserSerializer(read_only=True)
+    is_staff = serializers.BooleanField(source='user.is_staff', read_only=True)
+    is_active = serializers.BooleanField(source='user.is_active', read_only=True)
     avatar_url = serializers.SerializerMethodField()
     tier_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Profile
         fields = [
-            'id', 'user', 'full_name', 'phone_number', 'avatar', 'avatar_url',
+            'id', 'user', 'is_staff', 'is_active', 'full_name', 'phone_number', 'avatar', 'avatar_url',
             'bio', 'location', 'skill_level', 'evaluation_type', 'is_verified',
             'public_skill_level', 'total_skill_ratings', 'rating_points', 'tier_level', 'tier_name',
             'created_at', 'updated_at'
@@ -784,7 +786,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'date_joined', 'profile', 'stats']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'date_joined', 'is_active', 'is_staff', 'profile', 'stats']
         read_only_fields = ['id', 'date_joined']
 
 
