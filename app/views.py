@@ -572,10 +572,24 @@ class ClubListView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
     def post(self, request):
-        """Create a new club (admin dashboard)"""
-        # Allow creation from admin dashboard without authentication
+        """Create a new club (admin/manager dashboard)"""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+            
+        try:
+            profile = request.user.profile
+            if profile.role not in ['admin', 'manager'] and not request.user.is_superuser:
+                return Response({'error': 'Only admins and managers can create clubs'}, status=status.HTTP_403_FORBIDDEN)
+        except Exception:
+            if not request.user.is_superuser:
+                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+
         # Build plain dict so we can modify it safely without deep-copying file uploads
         data = {k: v for k, v in request.data.items() if k != 'primary_photo'}
+        
+        # If user is a manager, force them as the manager of the new club
+        if not request.user.is_superuser and request.user.profile.role == 'manager':
+            data['manager'] = request.user.id
 
         serializer = ClubSerializer(data=data)
         if serializer.is_valid():
