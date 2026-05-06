@@ -58,7 +58,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = [
-            'id', 'user', 'is_staff', 'is_active', 'full_name', 'phone_number', 'avatar', 'avatar_url',
+            'id', 'user', 'is_staff', 'is_active', 'role', 'full_name', 'phone_number', 'avatar', 'avatar_url',
             'bio', 'location', 'skill_level', 'evaluation_type', 'is_verified',
             'public_skill_level', 'total_skill_ratings', 'rating_points', 'tier_level', 'tier_name',
             'created_at', 'updated_at'
@@ -133,7 +133,7 @@ class ClubSerializer(serializers.ModelSerializer):
             'id', 'name', 'address', 'city', 'postal_code', 'latitude', 'longitude',
             'phone', 'email', 'website', 'reservation_link', 'images', 'primary_photo', 'rating',
             'review_count', 'opening_hours', 'amenities', 'price_min', 'price_max',
-            'currency', 'is_partner', 'courts', 'distance', 'price_range',
+            'currency', 'is_partner', 'manager', 'courts', 'distance', 'price_range',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'review_count', 'distance', 'price_range', 'primary_photo', 'created_at', 'updated_at']

@@ -35,6 +35,12 @@ class Profile(models.Model):
         ('old', 'Old (1-10)'),
     ]
     evaluation_type = models.CharField(max_length=10, choices=EVALUATION_TYPE_CHOICES, default='new')
+    ROLE_CHOICES = [
+        ('admin', 'Admin'),
+        ('manager', 'Manager'),
+        ('player', 'Player'),
+    ]
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='player')
     is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -145,6 +151,9 @@ class Club(models.Model):
 
     # Features and amenities
     amenities = models.JSONField(default=list)  # ["Parking", "Lockers", "Shower", "Pro Shop", etc.]
+
+    # Manager
+    manager = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='managed_clubs')
 
     # Price range
     price_min = models.DecimalField(max_digits=6, decimal_places=2, default=25.00)

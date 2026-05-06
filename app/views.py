@@ -43,10 +43,40 @@ def _upload_image_to_freeimage(uploaded_file):
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, permissions
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authtoken.models import Token
 from rest_framework.pagination import PageNumberPagination
+
+
+class IsAdminUserRole(permissions.BasePermission):
+    """
+    Allows access only to admin users (superusers or profile.role == 'admin').
+    """
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        try:
+            return request.user.profile.role == 'admin'
+        except Exception:
+            return False
+
+
+class IsManagerUserRole(permissions.BasePermission):
+    """
+    Allows access only to managers or admins.
+    """
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        try:
+            return request.user.profile.role in ['admin', 'manager']
+        except Exception:
+            return False
 
 import random
 
@@ -459,6 +489,15 @@ class ClubListView(APIView):
         # Base queryset
         clubs = Club.objects.all()
 
+        # If user is a manager, only show clubs they manage
+        if request.user.is_authenticated:
+            try:
+                profile = request.user.profile
+                if profile.role == 'manager' and not request.user.is_superuser:
+                    clubs = clubs.filter(manager=request.user)
+            except Exception:
+                pass
+
         # Apply filters
         if search:
             clubs = clubs.filter(
@@ -551,6 +590,23 @@ class ClubListView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+def check_club_manager_permission(user, club):
+    """Check if user has permission to manage a club"""
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    try:
+        profile = user.profile
+        if profile.role == 'admin':
+            return True
+        if profile.role == 'manager' and club.manager == user:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 class ClubDetailView(APIView):
     """Club detail API"""
     permission_classes = [AllowAny]  # Allow access for admin dashboard
@@ -565,9 +621,11 @@ class ClubDetailView(APIView):
             return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
 
     def put(self, request, club_id):
-        """Update club (admin dashboard)"""
+        """Update club (admin/manager dashboard)"""
         try:
             club = Club.objects.get(id=club_id)
+            if not check_club_manager_permission(request.user, club):
+                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         except Club.DoesNotExist:
             return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -584,9 +642,11 @@ class ClubDetailView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def patch(self, request, club_id):
-        """Patch club (for image uploads from admin dashboard)"""
+        """Patch club (for image uploads from admin/manager dashboard)"""
         try:
             club = Club.objects.get(id=club_id)
+            if not check_club_manager_permission(request.user, club):
+                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         except Club.DoesNotExist:
             return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -614,9 +674,20 @@ class ClubDetailView(APIView):
         )
 
     def delete(self, request, club_id):
-        """Delete club (admin dashboard)"""
+        """Delete club (admin only)"""
+        # Managers usually shouldn't delete clubs, only Admins
         try:
             club = Club.objects.get(id=club_id)
+            # Only Admin or Superuser can delete clubs
+            is_admin = request.user.is_superuser
+            try:
+                if not is_admin and request.user.profile.role == 'admin':
+                    is_admin = True
+            except: pass
+
+            if not is_admin:
+                return Response({'error': 'Only admins can delete clubs'}, status=status.HTTP_403_FORBIDDEN)
+
             club.delete()
             return Response({'message': 'Club deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
         except Club.DoesNotExist:
@@ -635,6 +706,17 @@ class CourtListView(APIView):
         """Get all courts for a club"""
         try:
             club = Club.objects.get(id=club_id)
+
+            # Check manager permission
+            if request.user.is_authenticated:
+                try:
+                    profile = request.user.profile
+                    if profile.role == 'manager' and not request.user.is_superuser:
+                        if club.manager != request.user:
+                             return Response({'error': 'You do not manage this club'}, status=status.HTTP_403_FORBIDDEN)
+                except Exception:
+                    pass
+
             courts = Court.objects.filter(club=club)
             serializer = CourtSerializer(courts, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -642,9 +724,12 @@ class CourtListView(APIView):
             return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request, club_id):
-        """Create a new court (admin dashboard)"""
+        """Create a new court (admin/manager dashboard)"""
         try:
             club = Club.objects.get(id=club_id)
+            if not check_club_manager_permission(request.user, club):
+                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+            
             serializer = CourtSerializer(data=request.data)
             if serializer.is_valid():
                 court = serializer.save(club=club)
@@ -668,9 +753,12 @@ class CourtDetailView(APIView):
             return Response({'error': 'Court not found'}, status=status.HTTP_404_NOT_FOUND)
 
     def put(self, request, court_id):
-        """Update court (admin dashboard)"""
+        """Update court (admin/manager dashboard)"""
         try:
             court = Court.objects.get(id=court_id)
+            if not check_club_manager_permission(request.user, court.club):
+                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+            
             serializer = CourtSerializer(court, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
@@ -680,9 +768,12 @@ class CourtDetailView(APIView):
             return Response({'error': 'Court not found'}, status=status.HTTP_404_NOT_FOUND)
 
     def delete(self, request, court_id):
-        """Delete court (admin dashboard)"""
+        """Delete court (admin/manager dashboard)"""
         try:
             court = Court.objects.get(id=court_id)
+            if not check_club_manager_permission(request.user, court.club):
+                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+            
             court.delete()
             return Response({'message': 'Court deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
         except Court.DoesNotExist:
@@ -698,12 +789,30 @@ class BookingListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Get user's bookings"""
         status_filter = request.query_params.get('status', '')
         date_from = request.query_params.get('date_from', '')
         date_to = request.query_params.get('date_to', '')
 
-        bookings = Booking.objects.filter(user=request.user)
+        # Filter bookings based on user role
+        bookings = Booking.objects.all()
+
+        if request.user.is_authenticated:
+            try:
+                profile = request.user.profile
+                if profile.role == 'admin' or request.user.is_superuser:
+                    # Admin sees all bookings
+                    pass
+                elif profile.role == 'manager':
+                    # Manager sees bookings for their own clubs
+                    bookings = bookings.filter(court__club__manager=request.user)
+                else:
+                    # Players see only their own bookings
+                    bookings = bookings.filter(user=request.user)
+            except Exception:
+                # Fallback to only user's bookings if profile error
+                bookings = bookings.filter(user=request.user)
+        else:
+            return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
 
         if status_filter:
             bookings = bookings.filter(status=status_filter)
@@ -825,6 +934,17 @@ class MatchListView(APIView):
 
         # Base queryset - exclude blocked users
         matches = Match.objects.exclude(organizer_id__in=blocked_user_ids)
+
+        # Role-based filtering for managers in dashboard
+        if request.user.is_authenticated:
+            try:
+                profile = request.user.profile
+                if profile.role == 'manager' and not request.user.is_superuser:
+                    # In dashboard context, restrict matches to their managed clubs
+                    if request.query_params.get('dashboard') == 'true':
+                        matches = matches.filter(club__manager=request.user)
+            except Exception:
+                pass
 
         # Apply filters
         if status_filter:
@@ -1867,11 +1987,17 @@ class UserStatsView(APIView):
 
 class UserListView(APIView):
     """User list and management API for admin dashboard"""
-    permission_classes = [AllowAny]  # Allow access for admin dashboard
+    permission_classes = [IsAdminUserRole]
 
     def get(self, request):
         """Get all users with profiles"""
         users = User.objects.select_related('profile').all().order_by('-date_joined')
+        
+        # Role filtering
+        role_filter = request.query_params.get('role')
+        if role_filter:
+            users = users.filter(profile__role=role_filter)
+            
         serializer = UserDetailSerializer(users, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -1893,7 +2019,7 @@ class UserListView(APIView):
 
 class UserDetailManagementView(APIView):
     """User detail management API for admin dashboard"""
-    permission_classes = [AllowAny]  # Allow access for admin dashboard
+    permission_classes = [IsAdminUserRole]
 
     def get(self, request, user_id):
         """Get user details"""
