@@ -13,5 +13,5 @@ from django.core.wsgi import get_wsgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 
-print("--- WSGI application is starting ---")
+print("--- WSGI application is starting ---", flush=True)
 application = get_wsgi_application()
