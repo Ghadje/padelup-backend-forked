@@ -28,8 +28,8 @@ admin.site.register(User, UserAdmin)
 # Custom admin classes for better display
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ['user', 'skill_level', 'public_skill_level', 'total_skill_ratings']
-    list_filter = ['skill_level']
+    list_display = ['user', 'skill_level', 'public_skill_level', 'total_skill_ratings', 'right_handed']
+    list_filter = ['skill_level', 'right_handed']
     search_fields = ['user__username', 'user__email', 'full_name']
 
 

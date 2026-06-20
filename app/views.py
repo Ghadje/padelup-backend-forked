@@ -280,13 +280,15 @@ class ProfileSetupView(APIView):
         try:
             profile = request.user.profile
 
-            # Build a plain dict of form fields (exclude file — can't be deep-copied
-            # by the serializer, and we handle the upload separately)
             data = {
                 key: request.data.get(key)
                 for key in ('location', 'bio', 'skill_level', 'evaluation_type')
                 if key in request.data
             }
+            if 'right_handed' in request.data:
+                data['right_handed'] = request.data.get('right_handed')
+            elif 'right-handed' in request.data:
+                data['right_handed'] = request.data.get('right-handed')
 
             # Upload avatar to Freeimage.host if provided
             if 'avatar' in request.FILES:
@@ -354,8 +356,11 @@ class ProfileView(APIView):
             'phone_number', 'full_name', 'bio', 'location',
             'skill_level', 'evaluation_type', 'external_avatar_url',
             'user_first_name', 'user_last_name', 'user_email',
+            'right_handed',
         )
         data = {key: request.data.get(key) for key in allowed_fields if key in request.data}
+        if 'right-handed' in request.data:
+            data['right_handed'] = request.data.get('right-handed')
 
         # Handle avatar_url (e.g. DiceBear URL) sent as a text field
         avatar_url = request.data.get('avatar_url')
@@ -2059,10 +2064,12 @@ class UserDetailManagementView(APIView):
 
             if 'profile' in request.data and hasattr(user, 'profile'):
                 p_data = request.data['profile']
+                if 'right-handed' in p_data and 'right_handed' not in p_data:
+                    p_data['right_handed'] = p_data['right-handed']
                 profile_fields = [
                     'full_name', 'phone_number', 'skill_level', 'evaluation_type', 
                     'bio', 'location', 'is_verified', 'rating_points', 
-                    'tier_level', 'tier_name', 'public_skill_level'
+                    'tier_level', 'tier_name', 'public_skill_level', 'right_handed'
                 ]
                 for field in profile_fields:
                     if field in p_data: setattr(user.profile, field, p_data[field])

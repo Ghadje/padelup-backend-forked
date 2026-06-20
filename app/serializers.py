@@ -59,7 +59,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         model = Profile
         fields = [
             'id', 'user', 'is_staff', 'is_active', 'role', 'full_name', 'phone_number', 'avatar', 'avatar_url',
-            'bio', 'location', 'skill_level', 'evaluation_type', 'is_verified',
+            'bio', 'location', 'skill_level', 'evaluation_type', 'is_verified', 'right_handed',
             'public_skill_level', 'total_skill_ratings', 'rating_points', 'tier_level', 'tier_name',
             'created_at', 'updated_at'
         ]
@@ -750,7 +750,7 @@ class ProfileSetupSerializer(serializers.ModelSerializer):
     """Profile setup after registration"""
     class Meta:
         model = Profile
-        fields = ['avatar', 'location', 'bio', 'skill_level', 'evaluation_type']
+        fields = ['avatar', 'location', 'bio', 'skill_level', 'evaluation_type', 'right_handed']
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
@@ -763,7 +763,8 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         model = Profile
         fields = [
             'phone_number', 'full_name', 'avatar', 'external_avatar_url', 'bio', 'location',
-            'skill_level', 'evaluation_type', 'user_first_name', 'user_last_name', 'user_email'
+            'skill_level', 'evaluation_type', 'user_first_name', 'user_last_name', 'user_email',
+            'right_handed'
         ]
 
     def update(self, instance, validated_data):

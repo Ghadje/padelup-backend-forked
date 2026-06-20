@@ -42,6 +42,7 @@ class Profile(models.Model):
     ]
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='player')
     is_verified = models.BooleanField(default=False)
+    right_handed = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
