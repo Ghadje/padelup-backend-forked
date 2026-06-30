@@ -700,10 +700,10 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
-            raise serializers.ValidationError({"password": "Password fields didn't match."})
+            raise serializers.ValidationError({"password": "Les mots de passe ne correspondent pas."})
 
         if User.objects.filter(email=attrs['email']).exists():
-            raise serializers.ValidationError({"email": "User with this email already exists."})
+            raise serializers.ValidationError({"email": "Un utilisateur avec cet e-mail existe déjà."})
 
         return attrs
 
@@ -741,7 +741,7 @@ class LoginSerializer(serializers.Serializer):
         password = attrs.get('password')
 
         if not email and not username:
-            raise serializers.ValidationError("Either email or username must be provided.")
+            raise serializers.ValidationError("L'e-mail ou le nom d'utilisateur doit être fourni.")
 
         return attrs
 

@@ -122,7 +122,7 @@ class RegisterView(APIView):
             return Response({
                 'user': UserSerializer(user).data,
                 'token': token.key,
-                'message': 'Registration successful'
+                'message': 'Inscription réussie'
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -156,9 +156,9 @@ class LoginView(APIView):
                     'user': UserSerializer(user).data,
                     'profile': ProfileSerializer(user.profile).data if hasattr(user, 'profile') else None,
                     'token': token.key,
-                    'message': 'Login successful'
+                    'message': 'Connexion réussie'
                 }, status=status.HTTP_200_OK)
-            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Identifiants invalides'}, status=status.HTTP_401_UNAUTHORIZED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -173,7 +173,7 @@ class LogoutView(APIView):
         except:
             pass
         logout(request)
-        return Response({'message': 'Logout successful'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Déconnexion réussie'}, status=status.HTTP_200_OK)
 
 
 class PasswordResetRequestView(APIView):
@@ -321,7 +321,7 @@ class ProfileSetupView(APIView):
                 serializer.save()
                 return Response({
                     'profile': ProfileSerializer(profile).data,
-                    'message': 'Profile setup completed'
+                    'message': 'Configuration du profil terminée'
                 }, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -395,12 +395,12 @@ class ProfileView(APIView):
                         profile.save(update_fields=['avatar'])
                     else:
                         return Response(
-                            {'detail': 'Image upload failed'},
+                            {'detail': 'Échec du téléchargement de l\'image'},
                             status=status.HTTP_400_BAD_REQUEST
                         )
                 else:
                     return Response(
-                        {'detail': 'Image hosting service unavailable'},
+                        {'detail': 'Service d\'hébergement d\'images indisponible'},
                         status=status.HTTP_502_BAD_GATEWAY
                     )
             except Exception as e:
@@ -414,7 +414,7 @@ class ProfileView(APIView):
             serializer.save()
             return Response({
                 'profile': ProfileSerializer(profile, context={'request': request}).data,
-                'message': 'Profile updated successfully'
+                'message': 'Profil mis à jour avec succès'
             }, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -432,7 +432,7 @@ class ProfileView(APIView):
         # due to foreign key relationships
         user.delete()
 
-        return Response({'message': 'Account deleted successfully'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Compte supprimé avec succès'}, status=status.HTTP_200_OK)
 
 
 class PublicProfileView(APIView):
@@ -445,7 +445,7 @@ class PublicProfileView(APIView):
 
             # Check if blocked
             if BlockedUser.is_blocked(request.user, user):
-                return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+                return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
             # Build response
             data = {
@@ -470,7 +470,7 @@ class PublicProfileView(APIView):
             return Response(data, status=status.HTTP_200_OK)
 
         except User.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # ============================================================================
@@ -579,15 +579,15 @@ class ClubListView(APIView):
     def post(self, request):
         """Create a new club (admin/manager dashboard)"""
         if not request.user.is_authenticated:
-            return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Authentification requise'}, status=status.HTTP_401_UNAUTHORIZED)
             
         try:
             profile = request.user.profile
             if profile.role not in ['admin', 'manager'] and not request.user.is_superuser:
-                return Response({'error': 'Only admins and managers can create clubs'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Seuls les administrateurs et managers peuvent créer des clubs'}, status=status.HTTP_403_FORBIDDEN)
         except Exception:
             if not request.user.is_superuser:
-                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
 
         # Build plain dict so we can modify it safely without deep-copying file uploads
         data = {k: v for k, v in request.data.items() if k != 'primary_photo'}
@@ -637,16 +637,16 @@ class ClubDetailView(APIView):
             serializer = ClubSerializer(club, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Club.DoesNotExist:
-            return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Club non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
     def put(self, request, club_id):
         """Update club (admin/manager dashboard)"""
         try:
             club = Club.objects.get(id=club_id)
             if not check_club_manager_permission(request.user, club):
-                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
         except Club.DoesNotExist:
-            return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Club non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
         data = {k: v for k, v in request.data.items() if k != 'primary_photo'}
         serializer = ClubSerializer(club, data=data, partial=True)
@@ -665,15 +665,15 @@ class ClubDetailView(APIView):
         try:
             club = Club.objects.get(id=club_id)
             if not check_club_manager_permission(request.user, club):
-                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
         except Club.DoesNotExist:
-            return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Club non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
         if 'primary_photo' in request.FILES:
             url = _upload_image_to_freeimage(request.FILES['primary_photo'])
             if not url:
                 return Response(
-                    {'detail': 'Image upload to hosting service failed'},
+                    {'detail': 'Échec du téléchargement de l\'image sur le service d\'hébergement'},
                     status=status.HTTP_502_BAD_GATEWAY
                 )
             club.images = [url] + [u for u in (club.images or []) if u != url]
@@ -705,12 +705,12 @@ class ClubDetailView(APIView):
             except: pass
 
             if not is_admin:
-                return Response({'error': 'Only admins can delete clubs'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Seuls les administrateurs peuvent supprimer des clubs'}, status=status.HTTP_403_FORBIDDEN)
 
             club.delete()
-            return Response({'message': 'Club deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+            return Response({'message': 'Club supprimé avec succès'}, status=status.HTTP_204_NO_CONTENT)
         except Club.DoesNotExist:
-            return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Club non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # ============================================================================
@@ -732,7 +732,7 @@ class CourtListView(APIView):
                     profile = request.user.profile
                     if profile.role == 'manager' and not request.user.is_superuser:
                         if club.manager != request.user:
-                             return Response({'error': 'You do not manage this club'}, status=status.HTTP_403_FORBIDDEN)
+                             return Response({'error': 'Vous ne gérez pas ce club'}, status=status.HTTP_403_FORBIDDEN)
                 except Exception:
                     pass
 
@@ -740,14 +740,14 @@ class CourtListView(APIView):
             serializer = CourtSerializer(courts, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Club.DoesNotExist:
-            return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Club non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request, club_id):
         """Create a new court (admin/manager dashboard)"""
         try:
             club = Club.objects.get(id=club_id)
             if not check_club_manager_permission(request.user, club):
-                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
             
             serializer = CourtSerializer(data=request.data)
             if serializer.is_valid():
@@ -755,7 +755,7 @@ class CourtListView(APIView):
                 return Response(CourtSerializer(court).data, status=status.HTTP_201_CREATED)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Club.DoesNotExist:
-            return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Club non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class CourtDetailView(APIView):
@@ -769,14 +769,14 @@ class CourtDetailView(APIView):
             serializer = CourtSerializer(court)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Court.DoesNotExist:
-            return Response({'error': 'Court not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Court non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
     def put(self, request, court_id):
         """Update court (admin/manager dashboard)"""
         try:
             court = Court.objects.get(id=court_id)
             if not check_club_manager_permission(request.user, court.club):
-                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
             
             serializer = CourtSerializer(court, data=request.data, partial=True)
             if serializer.is_valid():
@@ -784,19 +784,19 @@ class CourtDetailView(APIView):
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Court.DoesNotExist:
-            return Response({'error': 'Court not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Court non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
     def delete(self, request, court_id):
         """Delete court (admin/manager dashboard)"""
         try:
             court = Court.objects.get(id=court_id)
             if not check_club_manager_permission(request.user, court.club):
-                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
             
             court.delete()
-            return Response({'message': 'Court deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+            return Response({'message': 'Court supprimé avec succès'}, status=status.HTTP_204_NO_CONTENT)
         except Court.DoesNotExist:
-            return Response({'error': 'Court not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Court non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # ============================================================================
@@ -831,7 +831,7 @@ class BookingListView(APIView):
                 # Fallback to only user's bookings if profile error
                 bookings = bookings.filter(user=request.user)
         else:
-            return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Authentification requise'}, status=status.HTTP_401_UNAUTHORIZED)
 
         if status_filter:
             bookings = bookings.filter(status=status_filter)
@@ -864,7 +864,7 @@ class BookingListView(APIView):
             ).exists()
 
             if existing:
-                return Response({'error': 'Time slot already booked'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Ce créneau horaire est déjà réservé'}, status=status.HTTP_400_BAD_REQUEST)
 
             booking = serializer.save(user=request.user)
 
@@ -886,12 +886,12 @@ class BookingDetailView(APIView):
             booking = Booking.objects.get(id=booking_id)
             # Check permission
             if booking.user != request.user and not request.user.is_staff:
-                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
 
             serializer = BookingSerializer(booking)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Booking.DoesNotExist:
-            return Response({'error': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Réservation non trouvée'}, status=status.HTTP_404_NOT_FOUND)
 
     def put(self, request, booking_id):
         """Update booking status"""
@@ -899,16 +899,16 @@ class BookingDetailView(APIView):
             booking = Booking.objects.get(id=booking_id)
             # Check permission
             if booking.user != request.user and not request.user.is_staff:
-                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
 
             new_status = request.data.get('status')
             if new_status in ['cancelled', 'confirmed']:
                 booking.status = new_status
                 booking.save()
                 return Response(BookingSerializer(booking).data, status=status.HTTP_200_OK)
-            return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Statut invalide'}, status=status.HTTP_400_BAD_REQUEST)
         except Booking.DoesNotExist:
-            return Response({'error': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Réservation non trouvée'}, status=status.HTTP_404_NOT_FOUND)
 
     def delete(self, request, booking_id):
         """Cancel booking"""
@@ -916,13 +916,13 @@ class BookingDetailView(APIView):
             booking = Booking.objects.get(id=booking_id)
             # Check permission
             if booking.user != request.user and not request.user.is_staff:
-                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
 
             booking.status = 'cancelled'
             booking.save()
-            return Response({'message': 'Booking cancelled successfully'}, status=status.HTTP_200_OK)
+            return Response({'message': 'Réservation annulée avec succès'}, status=status.HTTP_200_OK)
         except Booking.DoesNotExist:
-            return Response({'error': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Réservation non trouvée'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # ============================================================================
@@ -1047,7 +1047,7 @@ class MatchListView(APIView):
     def post(self, request):
         """Create a new match - Requires authentication"""
         if not request.user.is_authenticated:
-            return Response({'error': 'Authentication required to create matches'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Authentification requise pour créer des matchs'}, status=status.HTTP_401_UNAUTHORIZED)
 
         serializer = MatchSerializer(data=request.data)
         if serializer.is_valid():
@@ -1101,7 +1101,7 @@ class MatchDetailView(APIView):
 
             return Response(data, status=status.HTTP_200_OK)
         except Match.DoesNotExist:
-            return Response({'error': 'Match not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
     def put(self, request, match_id):
         """Update match (organizer only)"""
@@ -1110,7 +1110,7 @@ class MatchDetailView(APIView):
 
             # Check permission
             if match.organizer != request.user:
-                return Response({'error': 'Only organizer can update match'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Seul l\'organisateur peut modifier le match'}, status=status.HTTP_403_FORBIDDEN)
 
             # Handle special actions
             action = request.data.get('action')
@@ -1128,7 +1128,7 @@ class MatchDetailView(APIView):
                         message=f'Match "{match.title}" has been cancelled'
                     )
 
-                return Response({'message': 'Match cancelled successfully'}, status=status.HTTP_200_OK)
+                return Response({'message': 'Match annulé avec succès'}, status=status.HTTP_200_OK)
 
             # Regular update
             serializer = MatchSerializer(match, data=request.data, partial=True)
@@ -1137,7 +1137,7 @@ class MatchDetailView(APIView):
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Match.DoesNotExist:
-            return Response({'error': 'Match not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
     def delete(self, request, match_id):
         """Delete match (organizer only)"""
@@ -1146,12 +1146,12 @@ class MatchDetailView(APIView):
 
             # Check permission
             if match.organizer != request.user:
-                return Response({'error': 'Only organizer can delete match'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Seul l\'organisateur peut supprimer le match'}, status=status.HTTP_403_FORBIDDEN)
 
             match.delete()
-            return Response({'message': 'Match deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+            return Response({'message': 'Match supprimé avec succès'}, status=status.HTTP_204_NO_CONTENT)
         except Match.DoesNotExist:
-            return Response({'error': 'Match not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class MatchJoinView(APIView):
@@ -1165,7 +1165,7 @@ class MatchJoinView(APIView):
 
             # Check if match is open
             if match.status != 'open':
-                return Response({'error': 'Match is not open for joining'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Le match n\'est pas ouvert aux inscriptions'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Check skill level using user's evaluation type
             user_skill = request.user.profile.skill_level if hasattr(request.user, 'profile') else 5
@@ -1177,13 +1177,13 @@ class MatchJoinView(APIView):
                 min_level = match.min_skill_level_new
                 max_level = match.max_skill_level_new
             if user_skill < min_level or user_skill > max_level:
-                return Response({'error': 'Your skill level does not match requirements'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Votre niveau de jeu ne correspond pas aux exigences du match'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Check if already joined
             existing = MatchParticipant.objects.filter(match=match, user=request.user).first()
             if existing:
                 if existing.status == 'confirmed':
-                    return Response({'error': 'Already joined this match'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'error': 'Vous avez déjà rejoint ce match'}, status=status.HTTP_400_BAD_REQUEST)
                 else:
                     # Update status
                     existing.status = 'confirmed'
@@ -1217,7 +1217,7 @@ class MatchJoinView(APIView):
 
             return Response(MatchParticipantSerializer(participant).data, status=status.HTTP_201_CREATED)
         except Match.DoesNotExist:
-            return Response({'error': 'Match not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
     def delete(self, request, match_id):
         """Leave a match"""
@@ -1226,7 +1226,7 @@ class MatchJoinView(APIView):
             participant = MatchParticipant.objects.filter(match=match, user=request.user).first()
 
             if not participant:
-                return Response({'error': 'Not a participant in this match'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Vous ne participez pas à ce match'}, status=status.HTTP_400_BAD_REQUEST)
 
             participant.delete()
 
@@ -1236,9 +1236,9 @@ class MatchJoinView(APIView):
                 match.is_open = True
                 match.save()
 
-            return Response({'message': 'Left match successfully'}, status=status.HTTP_200_OK)
+            return Response({'message': 'Vous avez quitté le match avec succès'}, status=status.HTTP_200_OK)
         except Match.DoesNotExist:
-            return Response({'error': 'Match not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class MatchParticipantManageView(APIView):
@@ -1252,7 +1252,7 @@ class MatchParticipantManageView(APIView):
 
             # Check if user is organizer
             if match.organizer != request.user:
-                return Response({'error': 'Only organizer can remove participants'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Seul l\'organisateur peut retirer des participants'}, status=status.HTTP_403_FORBIDDEN)
 
             # Find and remove participant
             participant = MatchParticipant.objects.filter(
@@ -1261,7 +1261,7 @@ class MatchParticipantManageView(APIView):
             ).first()
 
             if not participant:
-                return Response({'error': 'Participant not found'}, status=status.HTTP_404_NOT_FOUND)
+                return Response({'error': 'Participant non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
             # Notify the removed participant
             Notification.objects.create(
@@ -1279,9 +1279,9 @@ class MatchParticipantManageView(APIView):
                 match.is_open = True
                 match.save()
 
-            return Response({'message': 'Participant removed successfully'}, status=status.HTTP_200_OK)
+            return Response({'message': 'Participant retiré avec succès'}, status=status.HTTP_200_OK)
         except Match.DoesNotExist:
-            return Response({'error': 'Match not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class MatchInviteView(APIView):
@@ -1295,19 +1295,19 @@ class MatchInviteView(APIView):
 
             # Only organizer can invite friends
             if match.organizer != request.user:
-                return Response({'error': 'Only organizer can invite friends'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Seul l\'organisateur peut inviter des amis'}, status=status.HTTP_403_FORBIDDEN)
 
             # Get friend IDs from request
             friend_ids = request.data.get('friend_ids', [])
 
             if not friend_ids:
-                return Response({'error': 'No friends specified'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Aucun ami spécifié'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Convert string IDs to integers if needed
             try:
                 friend_ids = [int(fid) if isinstance(fid, str) else fid for fid in friend_ids]
             except (ValueError, TypeError):
-                return Response({'error': 'Invalid user ID format'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Format d\'ID d\'utilisateur invalide'}, status=status.HTTP_400_BAD_REQUEST)
 
             results = []
             invited_count = 0
@@ -1322,7 +1322,7 @@ class MatchInviteView(APIView):
                             'user_id': friend_id,
                             'username': friend.username,
                             'success': False,
-                            'error': 'Not friends with this user'
+                            'error': 'Vous n\'êtes pas ami avec cet utilisateur'
                         })
                         continue
 
@@ -1338,7 +1338,7 @@ class MatchInviteView(APIView):
                             'user_id': friend_id,
                             'username': friend.username,
                             'success': False,
-                            'error': 'Already in the match'
+                            'error': 'Déjà dans le match'
                         })
                         continue
 
@@ -1355,7 +1355,7 @@ class MatchInviteView(APIView):
                             'user_id': friend_id,
                             'username': friend.username,
                             'success': False,
-                            'error': 'Already invited'
+                            'error': 'Déjà invité'
                         })
                         continue
 
@@ -1378,18 +1378,18 @@ class MatchInviteView(APIView):
                     results.append({
                         'user_id': friend_id,
                         'success': False,
-                        'error': 'User not found'
+                        'error': 'Utilisateur non trouvé'
                     })
 
             return Response({
-                'message': f'Invited {invited_count} friend(s) successfully',
+                'message': f'{invited_count} ami(s) invité(s) avec succès',
                 'invited_count': invited_count,
                 'total_requested': len(friend_ids),
                 'results': results
             }, status=status.HTTP_200_OK)
 
         except Match.DoesNotExist:
-            return Response({'error': 'Match not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class MatchChatView(APIView):
@@ -1409,13 +1409,13 @@ class MatchChatView(APIView):
             ).exists()
 
             if not (match.organizer == request.user or is_participant):
-                return Response({'error': 'Not authorized to view chat'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Non autorisé à voir le chat'}, status=status.HTTP_403_FORBIDDEN)
 
             messages = match.messages.all().order_by('created_at')
             serializer = MatchMessageSerializer(messages, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Match.DoesNotExist:
-            return Response({'error': 'Match not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request, match_id):
         """Send message in match chat"""
@@ -1430,11 +1430,11 @@ class MatchChatView(APIView):
             ).exists()
 
             if not (match.organizer == request.user or is_participant):
-                return Response({'error': 'Not authorized to send messages'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Non autorisé à envoyer des messages'}, status=status.HTTP_403_FORBIDDEN)
 
             content = request.data.get('content')
             if not content:
-                return Response({'error': 'Message content required'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Le contenu du message est requis'}, status=status.HTTP_400_BAD_REQUEST)
 
             message = MatchMessage.objects.create(
                 match=match,
@@ -1445,7 +1445,7 @@ class MatchChatView(APIView):
             serializer = MatchMessageSerializer(message)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Match.DoesNotExist:
-            return Response({'error': 'Match not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class MatchFinishView(APIView):
@@ -1459,11 +1459,11 @@ class MatchFinishView(APIView):
 
             # Only organizer can finish the match
             if match.organizer != request.user:
-                return Response({'error': 'Only organizer can finish the match'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'error': 'Seul l\'organisateur peut marquer le match comme terminé'}, status=status.HTTP_403_FORBIDDEN)
 
             # Check if match time has passed or is in progress
             if not (match.is_in_progress() or match.is_completed()):
-                return Response({'error': 'Match has not started yet'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Le match n\'a pas encore commencé'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Get winner and loser IDs from request
             winner_ids = request.data.get('winner_ids', [])
@@ -1474,7 +1474,7 @@ class MatchFinishView(APIView):
                 winner_ids = [int(wid) if isinstance(wid, str) else wid for wid in winner_ids]
                 loser_ids = [int(lid) if isinstance(lid, str) else lid for lid in loser_ids]
             except (ValueError, TypeError):
-                return Response({'error': 'Invalid user ID format'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Format d\'ID d\'utilisateur invalide'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Validate that all IDs are participants
             all_participant_ids = list(
@@ -1511,15 +1511,15 @@ class MatchFinishView(APIView):
                     )
 
                 return Response({
-                    'message': 'Match marked as finished successfully',
+                    'message': 'Match marqué comme terminé avec succès',
                     'match_id': match.id,
                     'status': match.status
                 }, status=status.HTTP_200_OK)
             else:
-                return Response({'error': 'Failed to mark winners/losers'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Échec de l\'enregistrement des vainqueurs/perdants'}, status=status.HTTP_400_BAD_REQUEST)
 
         except Match.DoesNotExist:
-            return Response({'error': 'Match not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -1566,7 +1566,7 @@ class PlayerRatingView(APIView):
             # Check if match is completed
             match = Match.objects.get(id=match_id)
             if match.status != 'completed':
-                return Response({'error': 'Can only rate after match is completed'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'L\'évaluation n\'est possible qu\'après la fin du match'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Check if user was in the match
             was_participant = (
@@ -1579,7 +1579,7 @@ class PlayerRatingView(APIView):
             )
 
             if not was_participant:
-                return Response({'error': 'You were not in this match'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Vous ne participiez pas à ce match'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Check if already rated
             existing = Rating.objects.filter(
@@ -1589,7 +1589,7 @@ class PlayerRatingView(APIView):
             ).exists()
 
             if existing:
-                return Response({'error': 'Already rated this player for this match'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Vous avez déjà évalué ce joueur pour ce match'}, status=status.HTTP_400_BAD_REQUEST)
 
             rating = serializer.save(rater=request.user)
 
@@ -1641,7 +1641,7 @@ class CourtRatingView(APIView):
             ).exists()
 
             if existing:
-                return Response({'error': 'Already rated this court for this match'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Vous avez déjà évalué ce terrain pour ce match'}, status=status.HTTP_400_BAD_REQUEST)
 
             rating = serializer.save(rater=request.user)
 
@@ -1715,7 +1715,7 @@ class PostLikeView(APIView):
                 'like_count': post.like_count
             }, status=status.HTTP_200_OK)
         except CommunityPost.DoesNotExist:
-            return Response({'error': 'Post not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Publication non trouvée'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class PostReplyView(APIView):
@@ -1730,7 +1730,7 @@ class PostReplyView(APIView):
             serializer = PostReplySerializer(replies, many=True, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
         except CommunityPost.DoesNotExist:
-            return Response({'error': 'Post not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Publication non trouvée'}, status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request, post_id):
         """Create a reply"""
@@ -1740,7 +1740,7 @@ class PostReplyView(APIView):
             parent_reply_id = request.data.get('parent_reply_id')
 
             if not content:
-                return Response({'error': 'Content required'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Contenu requis'}, status=status.HTTP_400_BAD_REQUEST)
 
             reply = PostReply.objects.create(
                 post=post,
@@ -1752,7 +1752,7 @@ class PostReplyView(APIView):
             serializer = PostReplySerializer(reply, context={'request': request})
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except CommunityPost.DoesNotExist:
-            return Response({'error': 'Post not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Publication non trouvée'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # ============================================================================
@@ -1789,11 +1789,11 @@ class FriendRequestView(APIView):
             receiver = User.objects.get(id=receiver_id)
 
             if receiver == request.user:
-                return Response({'error': 'Cannot send friend request to yourself'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Vous ne pouvez pas vous envoyer de demande d\'ami'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Check if already friends
             if Friendship.are_friends(request.user, receiver):
-                return Response({'error': 'Already friends'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Déjà amis'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Check if request already exists
             existing = FriendRequest.objects.filter(
@@ -1803,7 +1803,7 @@ class FriendRequestView(APIView):
 
             if existing:
                 if existing.status == 'pending':
-                    return Response({'error': 'Friend request already pending'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'error': 'Demande d\'ami déjà en cours'}, status=status.HTTP_400_BAD_REQUEST)
                 else:
                     # Delete old request (accepted/rejected) before creating new one
                     existing.delete()
@@ -1826,7 +1826,7 @@ class FriendRequestView(APIView):
             return Response(FriendRequestSerializer(friend_request).data, status=status.HTTP_201_CREATED)
 
         except User.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class FriendRequestManageView(APIView):
@@ -1861,18 +1861,18 @@ class FriendRequestManageView(APIView):
                     message=f'{request.user.username} accepted your friend request'
                 )
 
-                return Response({'message': 'Friend request accepted'}, status=status.HTTP_200_OK)
+                return Response({'message': 'Demande d\'ami acceptée'}, status=status.HTTP_200_OK)
 
             elif action == 'reject':
                 friend_request.status = 'rejected'
                 friend_request.save()
-                return Response({'message': 'Friend request rejected'}, status=status.HTTP_200_OK)
+                return Response({'message': 'Demande d\'ami refusée'}, status=status.HTTP_200_OK)
 
             else:
-                return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Action invalide'}, status=status.HTTP_400_BAD_REQUEST)
 
         except FriendRequest.DoesNotExist:
-            return Response({'error': 'Friend request not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Demande d\'ami non trouvée'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class FriendsListView(APIView):
@@ -1900,12 +1900,12 @@ class FriendsListView(APIView):
 
             if friendship:
                 friendship.delete()
-                return Response({'message': 'Friend removed'}, status=status.HTTP_200_OK)
+                return Response({'message': 'Ami retiré'}, status=status.HTTP_200_OK)
             else:
-                return Response({'error': 'Not friends'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Pas amis'}, status=status.HTTP_400_BAD_REQUEST)
 
         except User.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # ============================================================================
@@ -1946,7 +1946,7 @@ class NotificationView(APIView):
                 is_read=False
             ).update(is_read=True)
 
-        return Response({'message': 'Notifications marked as read'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Notifications marquées comme lues'}, status=status.HTTP_200_OK)
 
 
 # ============================================================================
@@ -1989,7 +1989,7 @@ class UserStatsView(APIView):
             try:
                 user = User.objects.get(id=user_id)
             except User.DoesNotExist:
-                return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+                return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_404_NOT_FOUND)
         else:
             user = request.user
 
@@ -1997,7 +1997,7 @@ class UserStatsView(APIView):
             serializer = PlayerStatsSerializer(user.stats)
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
-            return Response({'error': 'Stats not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Statistiques non trouvées'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # ============================================================================
@@ -2047,7 +2047,7 @@ class UserDetailManagementView(APIView):
             serializer = UserDetailSerializer(user, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
         except User.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
     def put(self, request, user_id):
         return self.patch(request, user_id)
@@ -2085,16 +2085,16 @@ class UserDetailManagementView(APIView):
             serializer = UserDetailSerializer(user, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
         except User.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
     def delete(self, request, user_id):
         """Delete a user"""
         try:
             user = User.objects.get(id=user_id)
             user.delete()
-            return Response({'message': 'User deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+            return Response({'message': 'Utilisateur supprimé avec succès'}, status=status.HTTP_204_NO_CONTENT)
         except User.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # ============================================================================
@@ -2110,7 +2110,7 @@ class UserSearchView(APIView):
         query = request.query_params.get('q', '')
 
         if len(query) < 2:
-            return Response({'error': 'Query too short'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Requête de recherche trop courte'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Get blocked user IDs
         blocked_user_ids = BlockedUser.get_blocked_user_ids(request.user)
@@ -2168,12 +2168,12 @@ class SavedClubView(APIView):
         club_id = request.data.get('club_id')
 
         if not club_id:
-            return Response({'error': 'club_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'club_id est requis'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             club = Club.objects.get(id=club_id)
         except Club.DoesNotExist:
-            return Response({'error': 'Club not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Club non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
         # Check if already saved
         saved_club, created = SavedClub.objects.get_or_create(
@@ -2185,7 +2185,7 @@ class SavedClubView(APIView):
             serializer = SavedClubSerializer(saved_club, context={'request': request})
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
-            return Response({'error': 'Club already saved'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Club déjà enregistré'}, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request):
         """Unsave/unfavorite a club"""
@@ -2194,11 +2194,11 @@ class SavedClubView(APIView):
         club_id = request.data.get('club_id')
 
         if not club_id:
-            return Response({'error': 'club_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'club_id est requis'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             saved_club = SavedClub.objects.get(user=request.user, club_id=club_id)
             saved_club.delete()
-            return Response({'message': 'Club removed from favorites'}, status=status.HTTP_200_OK)
+            return Response({'message': 'Club retiré des favoris'}, status=status.HTTP_200_OK)
         except SavedClub.DoesNotExist:
-            return Response({'error': 'Club not in favorites'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Club non enregistré dans les favoris'}, status=status.HTTP_404_NOT_FOUND)
