@@ -1,14 +1,10 @@
 from django.conf import settings
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, To, Content
+from django.core.mail import EmailMultiAlternatives
+from django.utils.html import strip_tags
 
 
 def send_booking_confirmation(user, booking):
-    """Send booking confirmation email via SendGrid"""
-    if not settings.SENDGRID_API_KEY:
-        print('SendGrid API key not configured, skipping email')
-        return False
-
+    """Send booking confirmation email"""
     court_name = booking.court.name
     club_name = booking.court.club.name
     date = booking.date.strftime('%A, %B %d, %Y')
@@ -42,11 +38,7 @@ def send_booking_confirmation(user, booking):
 
 
 def send_match_join_confirmation(user, match):
-    """Send match join confirmation email via SendGrid"""
-    if not settings.SENDGRID_API_KEY:
-        print('SendGrid API key not configured, skipping email')
-        return False
-
+    """Send match join confirmation email"""
     date = match.date.strftime('%A, %B %d, %Y')
     time = match.time.strftime('%H:%M')
     match_type = match.match_type.capitalize()
@@ -78,11 +70,7 @@ def send_match_join_confirmation(user, match):
 
 
 def send_welcome_email(user):
-    """Send welcome email after registration via SendGrid"""
-    if not settings.SENDGRID_API_KEY:
-        print('SendGrid API key not configured, skipping welcome email')
-        return False
-
+    """Send welcome email after registration"""
     subject = 'Bienvenue sur PadelUp !'
     html_content = f"""
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 24px;">
@@ -111,10 +99,6 @@ def send_welcome_email(user):
 
 def send_password_reset_email(user, code):
     """Send password reset code via email"""
-    if not settings.SENDGRID_API_KEY:
-        print('SendGrid API key not configured, skipping password reset email')
-        return False
-
     subject = 'PadelUp - Code de réinitialisation'
     html_content = f"""
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 24px;">
@@ -138,18 +122,19 @@ def send_password_reset_email(user, code):
 
 
 def _send_email(to_email, subject, html_content):
-    """Send an email using SendGrid API"""
+    """Send an email using Django's configured mail backend"""
     try:
-        message = Mail(
-            from_email=Email(settings.DEFAULT_FROM_EMAIL),
-            to_emails=To(to_email),
+        text_content = strip_tags(html_content)
+        msg = EmailMultiAlternatives(
             subject=subject,
-            html_content=Content('text/html', html_content),
+            body=text_content,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[to_email],
         )
-        sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
-        response = sg.send(message)
-        print(f'Email sent to {to_email}, status: {response.status_code}')
-        return response.status_code in [200, 201, 202]
+        msg.attach_alternative(html_content, "text/html")
+        msg.send()
+        print(f'Email sent to {to_email}')
+        return True
     except Exception as e:
         print(f'Failed to send email to {to_email}: {e}')
         return False
