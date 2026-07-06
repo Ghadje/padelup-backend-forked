@@ -898,11 +898,22 @@ class BookingDetailView(APIView):
         try:
             booking = Booking.objects.get(id=booking_id)
             # Check permission
-            if booking.user != request.user and not request.user.is_staff:
+            is_admin = request.user.is_superuser or request.user.is_staff
+            try:
+                if not is_admin and request.user.profile.role == 'admin':
+                    is_admin = True
+            except Exception:
+                pass
+
+            if booking.user != request.user and not is_admin:
                 return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
 
             new_status = request.data.get('status')
-            if new_status in ['cancelled', 'confirmed']:
+            allowed_statuses = ['cancelled', 'confirmed']
+            if is_admin:
+                allowed_statuses = ['pending', 'confirmed', 'cancelled', 'completed']
+
+            if new_status in allowed_statuses:
                 booking.status = new_status
                 booking.save()
                 return Response(BookingSerializer(booking).data, status=status.HTTP_200_OK)
