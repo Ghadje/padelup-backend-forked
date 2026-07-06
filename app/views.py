@@ -1076,6 +1076,10 @@ class MatchListView(APIView):
         matches = matches.order_by('date_time')
 
         # Paginate
+        if request.query_params.get('dashboard') == 'true':
+            serializer = MatchSerializer(matches, many=True, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
         paginator = PageNumberPagination()
         paginator.page_size = 20
         result_page = paginator.paginate_queryset(matches, request)
