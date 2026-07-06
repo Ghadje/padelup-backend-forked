@@ -914,8 +914,31 @@ class BookingDetailView(APIView):
                 allowed_statuses = ['pending', 'confirmed', 'cancelled', 'completed']
 
             if new_status in allowed_statuses:
+                old_status = booking.status
                 booking.status = new_status
                 booking.save()
+
+                if new_status == 'confirmed' and old_status != 'confirmed':
+                    # Send French confirmation email
+                    try:
+                        from .email_service import send_booking_confirmation_fr
+                        send_booking_confirmation_fr(booking.user, booking)
+                    except Exception as e:
+                        print(f"Failed to send booking confirmation email: {e}")
+
+                    # Send in-app notification
+                    try:
+                        from .models import Notification
+                        date_str = booking.date.strftime('%d/%m/%Y')
+                        msg = f"Votre réservation au club {booking.court.club.name} le {date_str} à {booking.start_time.strftime('%H:%M')} a été confirmée !"
+                        Notification.objects.create(
+                            user=booking.user,
+                            type='booking_confirmed',
+                            message=msg
+                        )
+                    except Exception as e:
+                        print(f"Failed to create app notification: {e}")
+
                 return Response(BookingSerializer(booking).data, status=status.HTTP_200_OK)
             return Response({'error': 'Statut invalide'}, status=status.HTTP_400_BAD_REQUEST)
         except Booking.DoesNotExist:

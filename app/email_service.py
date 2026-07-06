@@ -37,6 +37,54 @@ def send_booking_confirmation(user, booking):
     return _send_email(user.email, subject, html_content)
 
 
+def send_booking_confirmation_fr(user, booking):
+    """Send booking confirmation email in French"""
+    court_name = booking.court.name
+    club_name = booking.court.club.name
+    
+    months = {
+        1: 'janvier', 2: 'février', 3: 'mars', 4: 'avril', 5: 'mai', 6: 'juin',
+        7: 'juillet', 8: 'août', 9: 'septembre', 10: 'octobre', 11: 'novembre', 12: 'décembre'
+    }
+    days = {
+        0: 'lundi', 1: 'mardi', 2: 'mercredi', 3: 'jeudi', 4: 'vendredi', 5: 'samedi', 6: 'dimanche'
+    }
+    
+    date_obj = booking.date
+    day_name = days[date_obj.weekday()]
+    month_name = months[date_obj.month]
+    date_str = f"{day_name} {date_obj.day} {month_name} {date_obj.year}"
+    
+    start_time = booking.start_time.strftime('%H:%M')
+    end_time = booking.end_time.strftime('%H:%M')
+
+    subject = f'Réservation Confirmée - {club_name}'
+    html_content = f"""
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 24px;">
+        <div style="background: #094A73; color: white; padding: 24px; border-radius: 16px 16px 0 0; text-align: center;">
+            <h1 style="margin: 0; font-size: 24px;">PadelUp</h1>
+            <p style="margin: 8px 0 0; opacity: 0.9;">Confirmation de Réservation</p>
+        </div>
+        <div style="background: white; padding: 24px; border-radius: 0 0 16px 16px;">
+            <p>Bonjour <strong>{user.first_name or user.username}</strong>,</p>
+            <p>Votre réservation de terrain a été confirmée !</p>
+            <div style="background: #f0fdf4; border: 1px solid #10B981; border-radius: 12px; padding: 16px; margin: 16px 0;">
+                <h3 style="margin: 0 0 12px; color: #094A73;">{club_name}</h3>
+                <p style="margin: 4px 0;"><strong>Terrain :</strong> {court_name}</p>
+                <p style="margin: 4px 0;"><strong>Date :</strong> {date_str}</p>
+                <p style="margin: 4px 0;"><strong>Heure :</strong> {start_time} - {end_time}</p>
+                <p style="margin: 4px 0;"><strong>Durée :</strong> {booking.duration} min</p>
+                <p style="margin: 4px 0;"><strong>Total :</strong> {booking.total_amount} {booking.currency}</p>
+            </div>
+            <p style="color: #6b7280; font-size: 14px;">À bientôt sur les terrains !</p>
+            <p style="color: #6b7280; font-size: 14px;">L'équipe PadelUp</p>
+        </div>
+    </div>
+    """
+
+    return _send_email(user.email, subject, html_content)
+
+
 def send_match_join_confirmation(user, match):
     """Send match join confirmation email"""
     date = match.date.strftime('%A, %B %d, %Y')

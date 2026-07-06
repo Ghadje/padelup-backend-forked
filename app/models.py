@@ -610,6 +610,7 @@ class Notification(models.Model):
         ('friend_request', 'Friend Request'),
         ('friend_accepted', 'Friend Request Accepted'),
         ('achievement', 'Achievement Unlocked'),
+        ('booking_confirmed', 'Booking Confirmed'),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
