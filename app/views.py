@@ -983,6 +983,7 @@ class MatchListView(APIView):
         skill_level = request.query_params.get('skill_level', '')
         my_matches = request.query_params.get('my_matches', '')
         search = request.query_params.get('search', '')  # Add search parameter
+        share_code = request.query_params.get('share_code', '')
 
         # Get blocked user IDs (only if authenticated)
         if request.user.is_authenticated:
@@ -992,6 +993,14 @@ class MatchListView(APIView):
 
         # Base queryset - exclude blocked users
         matches = Match.objects.exclude(organizer_id__in=blocked_user_ids)
+
+        # Quick lookup by share code
+        if share_code:
+            matches = matches.filter(share_code__iexact=share_code)
+            for match in matches:
+                match.update_status()
+            serializer = MatchSerializer(matches, many=True, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
         # Role-based filtering for managers in dashboard
         if request.user.is_authenticated:
