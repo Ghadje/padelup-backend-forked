@@ -289,6 +289,23 @@ class Booking(models.Model):
         self.total_amount = float(self.court.get_current_price()) * hours
         return self.total_amount
 
+    def update_status(self):
+        """Update booking status to completed if date/time has passed"""
+        if self.status in ['pending', 'confirmed']:
+            from django.utils import timezone
+            import datetime
+            
+            try:
+                naive_dt = datetime.datetime.combine(self.date, self.end_time)
+                current_tz = timezone.get_current_timezone()
+                end_datetime = timezone.make_aware(naive_dt, current_tz)
+                
+                if timezone.now() > end_datetime:
+                    self.status = 'completed'
+                    self.save(update_fields=['status'])
+            except Exception:
+                pass
+
 
 class Match(models.Model):
     """Match model matching Flutter MatchModel"""

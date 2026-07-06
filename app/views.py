@@ -833,6 +833,10 @@ class BookingListView(APIView):
         else:
             return Response({'error': 'Authentification requise'}, status=status.HTTP_401_UNAUTHORIZED)
 
+        # Update booking statuses
+        for booking in bookings:
+            booking.update_status()
+
         if status_filter:
             bookings = bookings.filter(status=status_filter)
 
@@ -888,6 +892,7 @@ class BookingDetailView(APIView):
             if booking.user != request.user and not request.user.is_staff:
                 return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
 
+            booking.update_status()
             serializer = BookingSerializer(booking)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Booking.DoesNotExist:
