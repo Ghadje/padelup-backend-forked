@@ -1063,7 +1063,8 @@ class MatchListView(APIView):
             )
         else:
             # For available matches (not my matches), only show public matches
-            matches = matches.filter(is_public=True)
+            if request.query_params.get('dashboard') != 'true':
+                matches = matches.filter(is_public=True)
             # For non-authenticated users, only show open matches
             if not request.user.is_authenticated:
                 matches = matches.filter(status='open')
