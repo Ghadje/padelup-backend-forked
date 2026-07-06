@@ -1152,8 +1152,9 @@ class MatchDetailView(APIView):
             match = Match.objects.get(id=match_id)
 
             # Check permission
-            if match.organizer != request.user:
-                return Response({'error': 'Seul l\'organisateur peut modifier le match'}, status=status.HTTP_403_FORBIDDEN)
+            is_admin = request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == 'admin')
+            if match.organizer != request.user and not is_admin:
+                return Response({'error': 'Seul l\'organisateur ou un administrateur peut modifier le match'}, status=status.HTTP_403_FORBIDDEN)
 
             # Handle special actions
             action = request.data.get('action')
@@ -1188,8 +1189,9 @@ class MatchDetailView(APIView):
             match = Match.objects.get(id=match_id)
 
             # Check permission
-            if match.organizer != request.user:
-                return Response({'error': 'Seul l\'organisateur peut supprimer le match'}, status=status.HTTP_403_FORBIDDEN)
+            is_admin = request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == 'admin')
+            if match.organizer != request.user and not is_admin:
+                return Response({'error': 'Seul l\'organisateur ou un administrateur peut supprimer le match'}, status=status.HTTP_403_FORBIDDEN)
 
             match.delete()
             return Response({'message': 'Match supprimé avec succès'}, status=status.HTTP_204_NO_CONTENT)

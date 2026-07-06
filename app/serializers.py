@@ -221,6 +221,8 @@ class MatchParticipantSerializer(serializers.ModelSerializer):
             return {
                 'id': obj.user.id,
                 'username': obj.user.username,
+                'first_name': obj.user.first_name,
+                'last_name': obj.user.last_name,
                 'skill_level': obj.user.profile.skill_level if hasattr(obj.user, 'profile') else None,
                 'evaluation_type': obj.user.profile.evaluation_type if hasattr(obj.user, 'profile') else 'new',
                 'avatar': avatar_url

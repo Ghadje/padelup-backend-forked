@@ -422,26 +422,18 @@ class Match(models.Model):
 
     def update_status(self):
         """Update match status based on current conditions"""
-        # Don't update if manually cancelled
-        if self.status == 'cancelled':
+        # Don't update if manually cancelled or completed
+        if self.status in ['cancelled', 'completed']:
             return
 
         current_datetime = timezone.now()
         match_start = self.get_match_datetime_start()
-        match_end = self.get_match_datetime_end()
         accepted_count = self.get_accepted_participants_count()
 
-        # Check if match has ended
-        if match_end < current_datetime:
+        # Check if match has passed start date & time (passes today's date & time)
+        if match_start < current_datetime:
             if self.status != 'completed':
                 self.status = 'completed'
-                self.is_open = False
-                self.save()
-
-        # Check if match is in progress
-        elif match_start <= current_datetime < match_end:
-            if self.status not in ['in_progress', 'completed']:
-                self.status = 'in_progress'
                 self.is_open = False
                 self.save()
 
