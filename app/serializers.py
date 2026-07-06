@@ -172,17 +172,18 @@ class BookingSerializer(serializers.ModelSerializer):
     court_name = serializers.CharField(source='court.name', read_only=True)
     club_name = serializers.CharField(source='court.club.name', read_only=True)
     user_name = serializers.CharField(source='user.username', read_only=True)
+    user_email = serializers.CharField(source='user.email', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = Booking
         fields = [
-            'id', 'court', 'court_name', 'club_name', 'user', 'user_name',
+            'id', 'court', 'court_name', 'club_name', 'user', 'user_name', 'user_email',
             'date', 'start_time', 'end_time', 'duration', 'status', 'status_display',
             'total_amount', 'currency', 'payment_intent_id', 'payment_status',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'court_name', 'club_name', 'user_name', 'status_display', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'court_name', 'club_name', 'user_name', 'user_email', 'status_display', 'created_at', 'updated_at']
 
     def create(self, validated_data):
         booking = super().create(validated_data)
