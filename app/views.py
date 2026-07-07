@@ -1017,8 +1017,10 @@ class MatchListView(APIView):
         if status_filter:
             matches = matches.filter(status=status_filter)
         else:
-            # By default, don't show cancelled matches
-            matches = matches.exclude(status='cancelled')
+            # By default, don't show cancelled matches in the mobile app / public views.
+            # Allow them on the dashboard so managers/admins can view and manage them.
+            if request.query_params.get('dashboard') != 'true':
+                matches = matches.exclude(status='cancelled')
 
         if match_type:
             matches = matches.filter(match_type=match_type)
@@ -1173,10 +1175,17 @@ class MatchDetailView(APIView):
                 match.is_open = False
                 match.save()
 
-                # Notify participants
+                # Notify participants (including organizer and all confirmed players)
+                users_to_notify = set()
+                if match.organizer:
+                    users_to_notify.add(match.organizer)
                 for participant in match.participants.filter(status='confirmed'):
+                    if participant.user:
+                        users_to_notify.add(participant.user)
+
+                for user in users_to_notify:
                     Notification.objects.create(
-                        user=participant.user,
+                        user=user,
                         type='match_cancelled',
                         match=match,
                         message=f'Match "{match.title}" has been cancelled'
@@ -1974,6 +1983,10 @@ class NotificationView(APIView):
     def get(self, request):
         """Get user's notifications"""
         unread_only = request.query_params.get('unread_only', 'false').lower() == 'true'
+
+        # Delete notifications older than 90 days for this user
+        three_months_ago = timezone.now() - timedelta(days=90)
+        Notification.objects.filter(user=request.user, created_at__lt=three_months_ago).delete()
 
         notifications = Notification.objects.filter(user=request.user)
 
