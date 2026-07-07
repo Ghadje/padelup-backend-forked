@@ -1017,9 +1017,9 @@ class MatchListView(APIView):
         if status_filter:
             matches = matches.filter(status=status_filter)
         else:
-            # By default, don't show cancelled matches in the mobile app / public views.
-            # Allow them on the dashboard so managers/admins can view and manage them.
-            if request.query_params.get('dashboard') != 'true':
+            # By default, don't show cancelled matches in public feeds.
+            # Allow them on the dashboard or for the user's own matches/history.
+            if request.query_params.get('dashboard') != 'true' and request.query_params.get('my_matches') != 'true':
                 matches = matches.exclude(status='cancelled')
 
         if match_type:
