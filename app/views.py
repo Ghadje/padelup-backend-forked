@@ -1188,7 +1188,7 @@ class MatchDetailView(APIView):
                         user=user,
                         type='match_cancelled',
                         match=match,
-                        message=f'Match "{match.title}" has been cancelled'
+                        message=f'Le match "{match.title}" a été annulé'
                     )
 
                 return Response({'message': 'Match annulé avec succès'}, status=status.HTTP_200_OK)
