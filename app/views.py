@@ -255,6 +255,86 @@ class LoginView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+class GoogleLoginView(APIView):
+    """Google Sign-In API"""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        id_token = request.data.get('id_token')
+        if not id_token:
+            return Response({'error': 'id_token requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verify token with Google's tokeninfo endpoint
+        try:
+            resp = http_requests.get(
+                f'https://oauth2.googleapis.com/tokeninfo?id_token={id_token}',
+                timeout=10
+            )
+            if resp.status_code != 200:
+                return Response({'error': 'Token Google invalide'}, status=status.HTTP_400_BAD_REQUEST)
+
+            payload = resp.json()
+            email = payload.get('email')
+            given_name = payload.get('given_name', '')
+            family_name = payload.get('family_name', '')
+            picture = payload.get('picture', '')
+
+            if not email:
+                return Response({'error': 'Pas d\'email associé à ce compte Google'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Find or create user
+            user_id = payload.get('sub') # Google Unique User ID
+            username = f"google_{user_id[:15]}" if user_id else email.split('@')[0]
+
+            user = User.objects.filter(email__iexact=email).first()
+            if not user:
+                # Generate unique username if needed
+                base_username = username
+                counter = 1
+                while User.objects.filter(username=username).exists():
+                    username = f"{base_username}_{counter}"
+                    counter += 1
+
+                password = User.objects.make_random_password()
+                user = User.objects.create_user(
+                    username=username,
+                    email=email,
+                    password=password,
+                    first_name=given_name,
+                    last_name=family_name
+                )
+                user.is_active = True # Google login is auto-verified
+                user.save()
+            else:
+                if not user.is_active:
+                    user.is_active = True
+                    user.save()
+
+            # Ensure profile exists
+            profile, created = Profile.objects.get_or_create(user=user)
+            if created or not profile.external_avatar_url:
+                if picture:
+                    profile.external_avatar_url = picture
+                    profile.save(update_fields=['external_avatar_url'])
+
+            # Ensure player stats exists
+            PlayerStats.objects.get_or_create(user=user)
+
+            # Generate/Get Token
+            token, created = Token.objects.get_or_create(user=user)
+
+            return Response({
+                'user': UserSerializer(user).data,
+                'profile': ProfileSerializer(profile).data,
+                'token': token.key,
+                'message': 'Connexion Google réussie'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Google Login error: {e}\n{traceback.format_exc()}")
+            return Response({'error': f'Erreur de connexion Google: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class LogoutView(APIView):
     """User logout API"""
     permission_classes = [IsAuthenticated]
