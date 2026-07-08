@@ -721,7 +721,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             first_name=validated_data.get('first_name', ''),
             last_name=validated_data.get('last_name', ''),
             is_staff=validated_data.get('is_staff', False),
-            is_active=validated_data.get('is_active', True)
+            is_active=False
         )
 
         # Update profile with full name

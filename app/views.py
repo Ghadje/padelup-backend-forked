@@ -84,9 +84,9 @@ from .models import (
     Profile, PlayerStats, Club, Court, Booking, Match, MatchParticipant,
     MatchMessage, Rating, CourtRating, Notification, CommunityPost,
     PostReply, CommunityGroup, FriendRequest, Friendship, PrivateMessage,
-    BlockedUser, PasswordResetCode
+    BlockedUser, PasswordResetCode, EmailVerificationCode
 )
-from .email_service import send_welcome_email, send_password_reset_email
+from .email_service import send_welcome_email, send_password_reset_email, send_verification_email
 from .serializers import (
     UserSerializer, ProfileSerializer, ProfileSetupSerializer, ProfileUpdateSerializer,
     PlayerStatsSerializer, ClubSerializer, CourtSerializer, BookingSerializer,
@@ -111,20 +111,113 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            # Create auth token
-            token, created = Token.objects.get_or_create(user=user)
-            # Send welcome email (non-blocking)
+
+            # Invalidate any previous unused verification codes for this user
+            EmailVerificationCode.objects.filter(user=user, is_used=False).update(is_used=True)
+
+            # Generate 6-digit code
+            code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+            EmailVerificationCode.objects.create(user=user, code=code)
+
+            # Send verification email (non-blocking)
             try:
-                send_welcome_email(user)
-            except Exception:
-                pass
-            # Return user data with token
+                send_verification_email(user, code)
+            except Exception as e:
+                logger.error(f"Failed to send verification email: {e}")
+
+            # Return verification required response
             return Response({
-                'user': UserSerializer(user).data,
-                'token': token.key,
-                'message': 'Inscription réussie'
+                'verification_required': True,
+                'email': user.email,
+                'message': 'Un code de confirmation a été envoyé à votre e-mail.'
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RegisterVerifyView(APIView):
+    """Verify registration code and activate user"""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip()
+        code = request.data.get('code', '').strip()
+
+        if not email or not code:
+            return Response({'error': 'Email et code requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
+            return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Retrieve the latest unused verification code within the last 24 hours
+        verification_code = EmailVerificationCode.objects.filter(
+            user=user,
+            code=code,
+            is_used=False,
+            created_at__gte=timezone.now() - timedelta(hours=24)
+        ).first()
+
+        if not verification_code:
+            return Response({'error': 'Code de confirmation invalide ou expiré'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Activate user
+        user.is_active = True
+        user.save()
+
+        # Mark code as used
+        verification_code.is_used = True
+        verification_code.save()
+
+        # Send welcome email (moved here after verification)
+        try:
+            send_welcome_email(user)
+        except Exception as e:
+            logger.error(f"Failed to send welcome email: {e}")
+
+        # Create/Get auth token
+        token, created = Token.objects.get_or_create(user=user)
+
+        return Response({
+            'user': UserSerializer(user).data,
+            'profile': ProfileSerializer(user.profile).data if hasattr(user, 'profile') else None,
+            'token': token.key,
+            'message': 'Inscription validée avec succès'
+        }, status=status.HTTP_200_OK)
+
+
+class RegisterResendCodeView(APIView):
+    """Resend registration confirmation code"""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip()
+        if not email:
+            return Response({'error': 'Email requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Only resend code for inactive users
+            user = User.objects.get(email__iexact=email)
+            if user.is_active:
+                return Response({'error': 'Ce compte est déjà activé'}, status=status.HTTP_400_BAD_REQUEST)
+        except User.DoesNotExist:
+            # Security: return success even if email doesn't exist, to not leak emails
+            return Response({'message': 'Un code de confirmation a été envoyé à votre e-mail.'})
+
+        # Invalidate previous codes
+        EmailVerificationCode.objects.filter(user=user, is_used=False).update(is_used=True)
+
+        # Generate new 6-digit code
+        code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        EmailVerificationCode.objects.create(user=user, code=code)
+
+        # Send code
+        try:
+            send_verification_email(user, code)
+        except Exception as e:
+            logger.error(f"Failed to resend verification email: {e}")
+
+        return Response({'message': 'Un code de confirmation a été envoyé à votre e-mail.'})
 
 
 class LoginView(APIView):

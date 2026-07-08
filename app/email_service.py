@@ -169,6 +169,30 @@ def send_password_reset_email(user, code):
     return _send_email(user.email, subject, html_content)
 
 
+def send_verification_email(user, code):
+    """Send registration verification code via email"""
+    subject = 'PadelUp - Code de confirmation d\'inscription'
+    html_content = f"""
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 24px;">
+        <div style="background: #094A73; color: white; padding: 24px; border-radius: 16px 16px 0 0; text-align: center;">
+            <h1 style="margin: 0; font-size: 24px;">PadelUp</h1>
+            <p style="margin: 8px 0 0; opacity: 0.9;">Confirmation de votre inscription</p>
+        </div>
+        <div style="background: white; padding: 24px; border-radius: 0 0 16px 16px;">
+            <p>Bonjour <strong>{user.first_name or user.username}</strong>,</p>
+            <p>Merci de vous être inscrit sur PadelUp ! Pour valider votre inscription, veuillez saisir le code de confirmation suivant dans l'application :</p>
+            <div style="background: #eff6ff; border: 1px solid #3b82f6; border-radius: 12px; padding: 24px; margin: 16px 0; text-align: center;">
+                <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #094A73; margin: 0;">{code}</p>
+            </div>
+            <p style="color: #6b7280; font-size: 14px;">Ce code est valable pendant <strong>24 heures</strong>.</p>
+            <p style="color: #6b7280; font-size: 14px;">Si vous n'avez pas initié cette inscription, vous pouvez ignorer cet email.</p>
+        </div>
+    </div>
+    """
+
+    return _send_email(user.email, subject, html_content)
+
+
 def _send_email(to_email, subject, html_content):
     """Send an email using Django's configured mail backend"""
     try:

@@ -4,6 +4,8 @@ from django.conf.urls.static import static
 from .views import (
     # Authentication
     RegisterView,
+    RegisterVerifyView,
+    RegisterResendCodeView,
     LoginView,
     LogoutView,
     PasswordResetRequestView,
@@ -76,6 +78,8 @@ urlpatterns = [
     # AUTHENTICATION ENDPOINTS
     # ============================================================================
     path('auth/register/', RegisterView.as_view(), name='register'),
+    path('auth/register/verify/', RegisterVerifyView.as_view(), name='register_verify'),
+    path('auth/register/resend/', RegisterResendCodeView.as_view(), name='register_resend'),
     path('auth/login/', LoginView.as_view(), name='login'),
     path('auth/logout/', LogoutView.as_view(), name='logout'),
     path('auth/password-reset/', PasswordResetRequestView.as_view(), name='password_reset'),

@@ -4,7 +4,8 @@ from django.contrib.auth.models import User
 from .models import (
     Profile, Club, Court, Booking, Match, MatchParticipant, MatchMessage,
     Rating, CourtRating, Notification, PlayerStats, CommunityPost, PostReply,
-    CommunityGroup, FriendRequest, Friendship, PrivateMessage, BlockedUser, SavedClub
+    CommunityGroup, FriendRequest, Friendship, PrivateMessage, BlockedUser, SavedClub,
+    EmailVerificationCode
 )
 
 
@@ -168,4 +169,12 @@ class SavedClubAdmin(admin.ModelAdmin):
     list_display = ['user', 'club', 'created_at']
     list_filter = ['created_at']
     search_fields = ['user__username', 'club__name']
+    date_hierarchy = 'created_at'
+
+
+@admin.register(EmailVerificationCode)
+class EmailVerificationCodeAdmin(admin.ModelAdmin):
+    list_display = ['user', 'code', 'is_used', 'created_at']
+    list_filter = ['is_used', 'created_at']
+    search_fields = ['user__username', 'user__email', 'code']
     date_hierarchy = 'created_at'
