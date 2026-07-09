@@ -283,13 +283,17 @@ class GoogleLoginView(APIView):
                 return Response({'error': 'Pas d\'email associé à ce compte Google'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Find or create user
-            user_id = payload.get('sub') # Google Unique User ID
-            username = f"google_{user_id[:15]}" if user_id else email.split('@')[0]
-
+            is_new_user = False
             user = User.objects.filter(email__iexact=email).first()
             if not user:
-                # Generate unique username if needed
-                base_username = username
+                is_new_user = True
+                
+                # Generate unique friendly username from email prefix
+                base_username = email.split('@')[0]
+                import re
+                base_username = re.sub(r'[^a-zA-Z0-9_.-]', '', base_username)
+                username = base_username
+                
                 counter = 1
                 while User.objects.filter(username=username).exists():
                     username = f"{base_username}_{counter}"
@@ -311,8 +315,15 @@ class GoogleLoginView(APIView):
                     user.save()
 
             # Ensure profile exists
-            profile, created = Profile.objects.get_or_create(user=user)
-            if created or not profile.external_avatar_url:
+            profile, profile_created = Profile.objects.get_or_create(user=user)
+            
+            # If profile was newly created, or if full_name is empty, populate it
+            full_name = f"{given_name} {family_name}".strip() or payload.get('name', '')
+            if profile_created or not profile.full_name:
+                profile.full_name = full_name
+                profile.save(update_fields=['full_name'])
+
+            if profile_created or not profile.external_avatar_url:
                 if picture:
                     profile.external_avatar_url = picture
                     profile.save(update_fields=['external_avatar_url'])
@@ -327,6 +338,7 @@ class GoogleLoginView(APIView):
                 'user': UserSerializer(user).data,
                 'profile': ProfileSerializer(profile).data,
                 'token': token.key,
+                'is_new_user': is_new_user,
                 'message': 'Connexion Google réussie'
             }, status=status.HTTP_200_OK)
 
