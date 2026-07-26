@@ -1062,7 +1062,9 @@ class BookingListView(APIView):
             send_booking_confirmation(request.user, booking)
 
             return Response(BookingSerializer(booking).data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        from .exceptions import extract_first_error
+        err_msg = extract_first_error(serializer.errors)
+        return Response({'error': err_msg, 'detail': err_msg}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class BookingDetailView(APIView):

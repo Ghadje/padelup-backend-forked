@@ -232,6 +232,13 @@ class BookingSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'court_name', 'club_name', 'user_name', 'user_email', 'status_display', 'created_at', 'updated_at']
+        validators = [
+            serializers.UniqueTogetherValidator(
+                queryset=Booking.objects.all(),
+                fields=['court', 'date', 'start_time'],
+                message="Ce terrain est déjà réservé pour la date et l'heure sélectionnées."
+            )
+        ]
 
     def create(self, validated_data):
         booking = super().create(validated_data)
