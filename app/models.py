@@ -31,14 +31,14 @@ class Profile(models.Model):
         default=5
     )
     EVALUATION_TYPE_CHOICES = [
-        ('new', 'New (1-8)'),
-        ('old', 'Old (1-10)'),
+        ('new', 'Nouveau (1-8)'),
+        ('old', 'Ancien (1-10)'),
     ]
     evaluation_type = models.CharField(max_length=10, choices=EVALUATION_TYPE_CHOICES, default='new')
     ROLE_CHOICES = [
-        ('admin', 'Admin'),
-        ('manager', 'Manager'),
-        ('player', 'Player'),
+        ('admin', 'Administrateur'),
+        ('manager', 'Gestionnaire'),
+        ('player', 'Joueur'),
     ]
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='player')
     is_verified = models.BooleanField(default=False)
@@ -203,12 +203,12 @@ class Club(models.Model):
 class Court(models.Model):
     """Court model matching Flutter CourtModel"""
     COURT_TYPES = [
-        ('glass', 'Glass Court'),
-        ('indoor', 'Indoor Court'),
-        ('outdoor', 'Outdoor Court'),
-        ('concrete', 'Concrete Court'),
-        ('premium', 'Premium Court'),
-        ('standard', 'Standard Court'),
+        ('glass', 'Terrain vitré'),
+        ('indoor', 'Terrain intérieur'),
+        ('outdoor', 'Terrain extérieur'),
+        ('concrete', 'Terrain en béton'),
+        ('premium', 'Terrain premium'),
+        ('standard', 'Terrain standard'),
     ]
 
     club = models.ForeignKey(Club, on_delete=models.CASCADE, related_name='courts')
@@ -252,10 +252,10 @@ class Court(models.Model):
 class Booking(models.Model):
     """Booking model for court reservations"""
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('confirmed', 'Confirmed'),
-        ('cancelled', 'Cancelled'),
-        ('completed', 'Completed'),
+        ('pending', 'En attente'),
+        ('confirmed', 'Confirmé'),
+        ('cancelled', 'Annulé'),
+        ('completed', 'Terminé'),
     ]
 
     court = models.ForeignKey(Court, on_delete=models.CASCADE, related_name='bookings')
@@ -310,18 +310,18 @@ class Booking(models.Model):
 class Match(models.Model):
     """Match model matching Flutter MatchModel"""
     MATCH_TYPES = [
-        ('casual', 'Casual'),
-        ('competitive', 'Competitive'),
-        ('tournament', 'Tournament'),
-        ('training', 'Training'),
+        ('casual', 'Amical'),
+        ('competitive', 'Compétitif'),
+        ('tournament', 'Tournoi'),
+        ('training', 'Entraînement'),
     ]
 
     STATUS_CHOICES = [
-        ('open', 'Open'),
-        ('full', 'Full'),
-        ('in_progress', 'In Progress'),
-        ('completed', 'Completed'),
-        ('cancelled', 'Cancelled'),
+        ('open', 'Ouvert'),
+        ('full', 'Complet'),
+        ('in_progress', 'En cours'),
+        ('completed', 'Terminé'),
+        ('cancelled', 'Annulé'),
     ]
 
     # Basic info
@@ -347,8 +347,8 @@ class Match(models.Model):
 
     # Dual evaluation grille support
     EVALUATION_TYPE_CHOICES = [
-        ('new', 'New (1-8)'),
-        ('old', 'Old (1-10)'),
+        ('new', 'Nouveau (1-8)'),
+        ('old', 'Ancien (1-10)'),
     ]
     evaluation_type = models.CharField(max_length=10, choices=EVALUATION_TYPE_CHOICES, default='new')
     min_skill_level_new = models.IntegerField(default=1, validators=[MinValueValidator(1), MaxValueValidator(8)])
@@ -383,7 +383,7 @@ class Match(models.Model):
             self.share_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
 
         if not self.title:
-            self.title = f"{self.get_match_type_display()} Match"
+            self.title = f"Match {self.get_match_type_display()}"
 
         super().save(*args, **kwargs)
 
@@ -527,18 +527,18 @@ class Match(models.Model):
 class MatchParticipant(models.Model):
     """Player slot in a match matching Flutter PlayerSlot"""
     STATUS_CHOICES = [
-        ('empty', 'Empty'),
-        ('pending', 'Pending'),
-        ('confirmed', 'Confirmed'),
-        ('declined', 'Declined'),
-        ('cancelled', 'Cancelled'),
+        ('empty', 'Vide'),
+        ('pending', 'En attente'),
+        ('confirmed', 'Confirmé'),
+        ('declined', 'Refusé'),
+        ('cancelled', 'Annulé'),
     ]
 
     PAYMENT_STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('paid', 'Paid'),
-        ('failed', 'Failed'),
-        ('refunded', 'Refunded'),
+        ('pending', 'En attente'),
+        ('paid', 'Payé'),
+        ('failed', 'Échoué'),
+        ('refunded', 'Remboursé'),
     ]
 
     match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name='participants')
@@ -612,14 +612,14 @@ class CourtRating(models.Model):
 class Notification(models.Model):
     """User notifications"""
     TYPE_CHOICES = [
-        ('match_invite', 'Match Invitation'),
-        ('match_reminder', 'Match Reminder'),
-        ('match_accepted', 'Match Accepted'),
-        ('match_cancelled', 'Match Cancelled'),
-        ('friend_request', 'Friend Request'),
-        ('friend_accepted', 'Friend Request Accepted'),
-        ('achievement', 'Achievement Unlocked'),
-        ('booking_confirmed', 'Booking Confirmed'),
+        ('match_invite', 'Invitation au match'),
+        ('match_reminder', 'Rappel de match'),
+        ('match_accepted', 'Match accepté'),
+        ('match_cancelled', 'Match annulé'),
+        ('friend_request', 'Demande d\'ami'),
+        ('friend_accepted', 'Demande d\'ami acceptée'),
+        ('achievement', 'Succès déverrouillé'),
+        ('booking_confirmed', 'Réservation confirmée'),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
@@ -640,12 +640,12 @@ class Notification(models.Model):
 class CommunityPost(models.Model):
     """Community forum posts"""
     CATEGORY_CHOICES = [
-        ('general', 'General'),
-        ('tips', 'Tips & Tricks'),
-        ('tournaments', 'Tournaments'),
-        ('equipment', 'Equipment'),
+        ('general', 'Général'),
+        ('tips', 'Conseils & Astuces'),
+        ('tournaments', 'Tournois'),
+        ('equipment', 'Équipement'),
         ('clubs', 'Clubs'),
-        ('looking_for_players', 'Looking for Players'),
+        ('looking_for_players', 'Recherche de joueurs'),
     ]
 
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='posts')
@@ -713,9 +713,9 @@ class CommunityGroup(models.Model):
 class FriendRequest(models.Model):
     """Friend request system"""
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('accepted', 'Accepted'),
-        ('rejected', 'Rejected'),
+        ('pending', 'En attente'),
+        ('accepted', 'Accepté'),
+        ('rejected', 'Refusé'),
     ]
 
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_friend_requests')

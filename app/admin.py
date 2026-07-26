@@ -13,7 +13,7 @@ from .models import (
 class ProfileInline(admin.StackedInline):
     model = Profile
     can_delete = False
-    verbose_name_plural = 'Profile'
+    verbose_name_plural = 'Profils'
 
 
 # Define a new User admin
@@ -113,7 +113,7 @@ class PlayerStatsAdmin(admin.ModelAdmin):
         if obj.matches_played > 0:
             return f"{(obj.matches_won / obj.matches_played * 100):.1f}%"
         return "0%"
-    win_rate.short_description = 'Win Rate'
+    win_rate.short_description = 'Taux de victoire'
 
 
 @admin.register(CommunityPost)

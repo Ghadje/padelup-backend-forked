@@ -1457,7 +1457,7 @@ class MatchJoinView(APIView):
                 user=match.organizer,
                 type='match_accepted',
                 match=match,
-                message=f'{request.user.username} joined your match "{match.title}"'
+                message=f'{request.user.username} a rejoint votre match "{match.title}"'
             )
 
             # Send confirmation email
@@ -1517,7 +1517,7 @@ class MatchParticipantManageView(APIView):
                 user_id=participant_id,
                 type='removed_from_match',
                 match=match,
-                message=f'You have been removed from match "{match.title}"'
+                message=f'Vous avez été retiré du match "{match.title}"'
             )
 
             participant.delete()
@@ -1613,7 +1613,7 @@ class MatchInviteView(APIView):
                         user=friend,
                         type='match_invite',
                         match=match,
-                        message=f'{request.user.username} invited you to join "{match.title}"'
+                        message=f'{request.user.username} vous a invité à rejoindre "{match.title}"'
                     )
 
                     results.append({
@@ -1712,7 +1712,7 @@ class MatchFinishView(APIView):
 
             # Check if match time has passed or is in progress
             if not (match.is_in_progress() or match.is_completed()):
-                return Response({'error': 'Le match n\'a pas encore commencé'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Le match n\'est pas encore commencé'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Get winner and loser IDs from request
             winner_ids = request.data.get('winner_ids', [])
@@ -1725,21 +1725,14 @@ class MatchFinishView(APIView):
             except (ValueError, TypeError):
                 return Response({'error': 'Format d\'ID d\'utilisateur invalide'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validate that all IDs are participants
-            all_participant_ids = list(
-                match.participants.filter(status='confirmed').values_list('user_id', flat=True)
-            )
-            # Add organizer if not in participants
-            if match.organizer.id not in all_participant_ids:
-                all_participant_ids.append(match.organizer.id)
-
+            # Check if all users are participants
             for winner_id in winner_ids:
-                if winner_id not in all_participant_ids:
-                    return Response({'error': f'User {winner_id} is not a participant'}, status=status.HTTP_400_BAD_REQUEST)
+                if not match.participants.filter(user_id=winner_id, status='confirmed').exists() and match.organizer.id != winner_id:
+                    return Response({'error': f'L\'utilisateur {winner_id} n\'est pas un participant'}, status=status.HTTP_400_BAD_REQUEST)
 
             for loser_id in loser_ids:
-                if loser_id not in all_participant_ids:
-                    return Response({'error': f'User {loser_id} is not a participant'}, status=status.HTTP_400_BAD_REQUEST)
+                if not match.participants.filter(user_id=loser_id, status='confirmed').exists() and match.organizer.id != loser_id:
+                    return Response({'error': f'L\'utilisateur {loser_id} n\'est pas un participant'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Mark match as completed
             match.status = 'completed'
@@ -1756,7 +1749,7 @@ class MatchFinishView(APIView):
                         user=participant.user,
                         type='match_reminder',  # Using existing type
                         match=match,
-                        message=f'Match "{match.title}" has been completed. Please rate other players!'
+                        message=f'Le match "{match.title}" est terminé. N\'oubliez pas d\'évaluer les autres joueurs !'
                     )
 
                 return Response({
@@ -2069,7 +2062,7 @@ class FriendRequestView(APIView):
                 user=receiver,
                 type='friend_request',
                 friend_request=friend_request,
-                message=f'{request.user.username} sent you a friend request'
+                message=f'{request.user.username} vous a envoyé une demande d\'ami'
             )
 
             return Response(FriendRequestSerializer(friend_request).data, status=status.HTTP_201_CREATED)
@@ -2107,7 +2100,7 @@ class FriendRequestManageView(APIView):
                     user=friend_request.sender,
                     type='friend_accepted',
                     friend_request=friend_request,
-                    message=f'{request.user.username} accepted your friend request'
+                    message=f'{request.user.username} a accepté votre demande d\'ami'
                 )
 
                 return Response({'message': 'Demande d\'ami acceptée'}, status=status.HTTP_200_OK)

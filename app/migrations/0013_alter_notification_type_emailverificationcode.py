@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='notification',
             name='type',
-            field=models.CharField(choices=[('match_invite', 'Match Invitation'), ('match_reminder', 'Match Reminder'), ('match_accepted', 'Match Accepted'), ('match_cancelled', 'Match Cancelled'), ('friend_request', 'Friend Request'), ('friend_accepted', 'Friend Request Accepted'), ('achievement', 'Achievement Unlocked'), ('booking_confirmed', 'Booking Confirmed')], max_length=20),
+            field=models.CharField(choices=[('match_invite', 'Invitation au match'), ('match_reminder', 'Rappel de match'), ('match_accepted', 'Match accepté'), ('match_cancelled', 'Match annulé'), ('friend_request', 'Demande d\'ami'), ('friend_accepted', 'Demande d\'ami acceptée'), ('achievement', 'Succès déverrouillé'), ('booking_confirmed', 'Réservation confirmée')], max_length=20),
         ),
         migrations.CreateModel(
             name='EmailVerificationCode',

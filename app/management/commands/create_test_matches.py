@@ -62,8 +62,8 @@ class Command(BaseCommand):
                 hours = random.choice([9, 11, 14, 16, 18, 20])
 
                 match = Match.objects.create(
-                    title=f"{random.choice(['Morning', 'Afternoon', 'Evening'])} {random.choice(['Friendly', 'Competitive', 'Training', 'Tournament'])} Match",
-                    description=f"Join us for an exciting padel match at {club.name}!",
+                    title=f"Match {random.choice(['amical', 'compétitif', 'd\'entraînement', 'de tournoi'])} du {random.choice(['matin', 'soir'])}",
+                    description=f"Rejoignez-nous pour un match de padel passionnant au club {club.name} !",
                     organizer=random.choice([test_user] + other_users[:2]),
                     club=club,
                     court=court,
@@ -109,8 +109,8 @@ class Command(BaseCommand):
             court = random.choice(courts)
 
             match = Match.objects.create(
-                title=f"Completed Match #{i+1}",
-                description="This match has been completed.",
+                title=f"Match terminé #{i+1}",
+                description="Ce match est terminé.",
                 organizer=test_user,
                 club=club,
                 court=court,
@@ -147,8 +147,8 @@ class Command(BaseCommand):
             court = random.choice(courts)
 
             match = Match.objects.create(
-                title=f"Private Match - Invite Only",
-                description="This is a private match for invited players only.",
+                title=f"Match privé - Sur invitation uniquement",
+                description="Ceci est un match privé réservé aux joueurs invités.",
                 organizer=test_user,
                 club=club,
                 court=court,

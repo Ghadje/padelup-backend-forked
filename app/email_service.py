@@ -4,32 +4,46 @@ from django.utils.html import strip_tags
 
 
 def send_booking_confirmation(user, booking):
-    """Send booking confirmation email"""
+    """Send booking confirmation email in French"""
     court_name = booking.court.name
     club_name = booking.court.club.name
-    date = booking.date.strftime('%A, %B %d, %Y')
+
+    months = {
+        1: 'janvier', 2: 'février', 3: 'mars', 4: 'avril', 5: 'mai', 6: 'juin',
+        7: 'juillet', 8: 'août', 9: 'septembre', 10: 'octobre', 11: 'novembre', 12: 'décembre'
+    }
+    days = {
+        0: 'lundi', 1: 'mardi', 2: 'mercredi', 3: 'jeudi', 4: 'vendredi', 5: 'samedi', 6: 'dimanche'
+    }
+
+    date_obj = booking.date
+    day_name = days[date_obj.weekday()]
+    month_name = months[date_obj.month]
+    date_str = f"{day_name} {date_obj.day} {month_name} {date_obj.year}"
+
     start_time = booking.start_time.strftime('%H:%M')
     end_time = booking.end_time.strftime('%H:%M')
 
-    subject = f'Booking Confirmed - {club_name}'
+    subject = f'Réservation confirmée - {club_name}'
     html_content = f"""
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 24px;">
         <div style="background: #094A73; color: white; padding: 24px; border-radius: 16px 16px 0 0; text-align: center;">
             <h1 style="margin: 0; font-size: 24px;">PadelUp</h1>
-            <p style="margin: 8px 0 0; opacity: 0.9;">Booking Confirmation</p>
+            <p style="margin: 8px 0 0; opacity: 0.9;">Confirmation de réservation</p>
         </div>
         <div style="background: white; padding: 24px; border-radius: 0 0 16px 16px;">
-            <p>Hi <strong>{user.first_name or user.username}</strong>,</p>
-            <p>Your court booking has been confirmed!</p>
+            <p>Bonjour <strong>{user.first_name or user.username}</strong>,</p>
+            <p>Votre réservation de terrain a été confirmée !</p>
             <div style="background: #f0fdf4; border: 1px solid #10B981; border-radius: 12px; padding: 16px; margin: 16px 0;">
                 <h3 style="margin: 0 0 12px; color: #094A73;">{club_name}</h3>
-                <p style="margin: 4px 0;"><strong>Court:</strong> {court_name}</p>
-                <p style="margin: 4px 0;"><strong>Date:</strong> {date}</p>
-                <p style="margin: 4px 0;"><strong>Time:</strong> {start_time} - {end_time}</p>
-                <p style="margin: 4px 0;"><strong>Duration:</strong> {booking.duration} min</p>
-                <p style="margin: 4px 0;"><strong>Total:</strong> {booking.total_amount} {booking.currency}</p>
+                <p style="margin: 4px 0;"><strong>Terrain :</strong> {court_name}</p>
+                <p style="margin: 4px 0;"><strong>Date :</strong> {date_str}</p>
+                <p style="margin: 4px 0;"><strong>Heure :</strong> {start_time} - {end_time}</p>
+                <p style="margin: 4px 0;"><strong>Durée :</strong> {booking.duration} min</p>
+                <p style="margin: 4px 0;"><strong>Total :</strong> {booking.total_amount} {booking.currency}</p>
             </div>
-            <p style="color: #6b7280; font-size: 14px;">See you on the court!</p>
+            <p style="color: #6b7280; font-size: 14px;">À bientôt sur les terrains !</p>
+            <p style="color: #6b7280; font-size: 14px;">L'équipe PadelUp</p>
         </div>
     </div>
     """
@@ -86,30 +100,58 @@ def send_booking_confirmation_fr(user, booking):
 
 
 def send_match_join_confirmation(user, match):
-    """Send match join confirmation email"""
-    date = match.date.strftime('%A, %B %d, %Y')
-    time = match.time.strftime('%H:%M')
-    match_type = match.match_type.capitalize()
+    """Send match join confirmation email in French"""
+    months = {
+        1: 'janvier', 2: 'février', 3: 'mars', 4: 'avril', 5: 'mai', 6: 'juin',
+        7: 'juillet', 8: 'août', 9: 'septembre', 10: 'octobre', 11: 'novembre', 12: 'décembre'
+    }
+    days = {
+        0: 'lundi', 1: 'mardi', 2: 'mercredi', 3: 'jeudi', 4: 'vendredi', 5: 'samedi', 6: 'dimanche'
+    }
 
-    subject = f'Match Joined - {match.title}'
+    if hasattr(match, 'date'):
+        date_obj = match.date
+    elif hasattr(match, 'date_time'):
+        date_obj = match.date_time.date()
+    else:
+        date_obj = None
+
+    if date_obj:
+        day_name = days[date_obj.weekday()]
+        month_name = months[date_obj.month]
+        date_str = f"{day_name} {date_obj.day} {month_name} {date_obj.year}"
+    else:
+        date_str = ''
+
+    if hasattr(match, 'time'):
+        time_str = match.time.strftime('%H:%M')
+    elif hasattr(match, 'date_time'):
+        time_str = match.date_time.strftime('%H:%M')
+    else:
+        time_str = ''
+
+    match_type = match.get_match_type_display() if hasattr(match, 'get_match_type_display') else match.match_type.capitalize()
+
+    subject = f'Match rejoint - {match.title}'
     html_content = f"""
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 24px;">
         <div style="background: #094A73; color: white; padding: 24px; border-radius: 16px 16px 0 0; text-align: center;">
             <h1 style="margin: 0; font-size: 24px;">PadelUp</h1>
-            <p style="margin: 8px 0 0; opacity: 0.9;">Match Confirmation</p>
+            <p style="margin: 8px 0 0; opacity: 0.9;">Confirmation du match</p>
         </div>
         <div style="background: white; padding: 24px; border-radius: 0 0 16px 16px;">
-            <p>Hi <strong>{user.first_name or user.username}</strong>,</p>
-            <p>You have successfully joined a match!</p>
+            <p>Bonjour <strong>{user.first_name or user.username}</strong>,</p>
+            <p>Vous avez rejoint un match avec succès !</p>
             <div style="background: #eff6ff; border: 1px solid #3b82f6; border-radius: 12px; padding: 16px; margin: 16px 0;">
                 <h3 style="margin: 0 0 12px; color: #094A73;">{match.title}</h3>
-                <p style="margin: 4px 0;"><strong>Type:</strong> {match_type}</p>
-                <p style="margin: 4px 0;"><strong>Date:</strong> {date}</p>
-                <p style="margin: 4px 0;"><strong>Time:</strong> {time}</p>
-                <p style="margin: 4px 0;"><strong>Organizer:</strong> {match.organizer.username}</p>
-                <p style="margin: 4px 0;"><strong>Players:</strong> {match.get_accepted_participants_count()}/{match.max_players}</p>
+                <p style="margin: 4px 0;"><strong>Type :</strong> {match_type}</p>
+                <p style="margin: 4px 0;"><strong>Date :</strong> {date_str}</p>
+                <p style="margin: 4px 0;"><strong>Heure :</strong> {time_str}</p>
+                <p style="margin: 4px 0;"><strong>Organisateur :</strong> {match.organizer.username}</p>
+                <p style="margin: 4px 0;"><strong>Joueurs :</strong> {match.get_accepted_participants_count()}/{match.max_players}</p>
             </div>
-            <p style="color: #6b7280; font-size: 14px;">Good luck and have fun!</p>
+            <p style="color: #6b7280; font-size: 14px;">Bonne chance et bon match !</p>
+            <p style="color: #6b7280; font-size: 14px;">L'équipe PadelUp</p>
         </div>
     </div>
     """
