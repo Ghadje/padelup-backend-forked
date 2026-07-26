@@ -83,10 +83,14 @@ class PlayerStatsSerializer(serializers.ModelSerializer):
     """Player statistics serializer"""
     user = UserSerializer(read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
-    win_rate = serializers.ReadOnlyField()
+    win_rate = serializers.SerializerMethodField()
     public_skill_level = serializers.FloatField(source='user.profile.public_skill_level', read_only=True)
     total_skill_ratings = serializers.IntegerField(source='user.profile.total_skill_ratings', read_only=True)
     skill_level = serializers.IntegerField(source='user.profile.skill_level', read_only=True)
+
+    matches_played = serializers.SerializerMethodField()
+    matches_won = serializers.SerializerMethodField()
+    matches_lost = serializers.SerializerMethodField()
 
     class Meta:
         model = PlayerStats
@@ -97,6 +101,50 @@ class PlayerStatsSerializer(serializers.ModelSerializer):
             'public_skill_level', 'total_skill_ratings', 'skill_level', 'updated_at'
         ]
         read_only_fields = ['id', 'user', 'username', 'win_rate', 'public_skill_level', 'total_skill_ratings', 'skill_level', 'updated_at']
+
+    def get_matches_played(self, obj):
+        from app.models import Match, MatchParticipant
+        from django.db.models import Q
+        user = obj.user
+        if not user:
+            return obj.matches_played
+        participant_match_ids = MatchParticipant.objects.filter(
+            user=user, status='confirmed'
+        ).values_list('match_id', flat=True)
+
+        completed_count = Match.objects.filter(
+            status='completed'
+        ).filter(
+            Q(organizer=user) | Q(id__in=participant_match_ids)
+        ).distinct().count()
+        return max(obj.matches_played, completed_count)
+
+    def get_matches_won(self, obj):
+        from app.models import Match
+        user = obj.user
+        if not user:
+            return obj.matches_won
+        won_count = Match.objects.filter(
+            status='completed', winners=user
+        ).distinct().count()
+        return max(obj.matches_won, won_count)
+
+    def get_matches_lost(self, obj):
+        from app.models import Match
+        user = obj.user
+        if not user:
+            return obj.matches_lost
+        lost_count = Match.objects.filter(
+            status='completed', losers=user
+        ).distinct().count()
+        return max(obj.matches_lost, lost_count)
+
+    def get_win_rate(self, obj):
+        played = self.get_matches_played(obj)
+        won = self.get_matches_won(obj)
+        if played == 0:
+            return 0.0
+        return round((won / played) * 100, 1)
 
 
 class CourtSerializer(serializers.ModelSerializer):
