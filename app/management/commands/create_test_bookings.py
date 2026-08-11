@@ -21,7 +21,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR('No courts found. Please add clubs and courts first.'))
             return
 
-        statuses = ['pending', 'confirmed', 'completed', 'cancelled']
+        statuses = ['confirmed', 'completed', 'cancelled']
         bookings_created = 0
 
         # Create 15-20 random bookings
@@ -44,7 +44,7 @@ class Command(BaseCommand):
             if booking_date < timezone.now().date():
                 status = random.choice(['completed', 'cancelled'])
             else:
-                status = random.choice(['pending', 'confirmed', 'cancelled'])
+                status = random.choice(['confirmed', 'cancelled'])
 
             try:
                 booking = Booking.objects.create(

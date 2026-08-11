@@ -252,7 +252,6 @@ class Court(models.Model):
 class Booking(models.Model):
     """Booking model for court reservations"""
     STATUS_CHOICES = [
-        ('pending', 'En attente'),
         ('confirmed', 'Confirmé'),
         ('cancelled', 'Annulé'),
         ('completed', 'Terminé'),
@@ -265,7 +264,7 @@ class Booking(models.Model):
     end_time = models.TimeField()
     duration = models.IntegerField(default=60)  # Duration in minutes
 
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='confirmed')
 
     # Payment info
     total_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
@@ -291,7 +290,7 @@ class Booking(models.Model):
 
     def update_status(self):
         """Update booking status to completed if date/time has passed"""
-        if self.status in ['pending', 'confirmed']:
+        if self.status == 'confirmed':
             from django.utils import timezone
             import datetime
             

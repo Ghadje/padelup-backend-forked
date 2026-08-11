@@ -1049,7 +1049,7 @@ class BookingListView(APIView):
                 court_id=court_id,
                 date=date,
                 start_time=start_time,
-                status__in=['confirmed', 'pending']
+                status__in=['confirmed']
             ).exists()
 
             if existing:
@@ -1103,7 +1103,7 @@ class BookingDetailView(APIView):
             new_status = request.data.get('status')
             allowed_statuses = ['cancelled', 'confirmed']
             if is_admin:
-                allowed_statuses = ['pending', 'confirmed', 'cancelled', 'completed']
+                allowed_statuses = ['confirmed', 'cancelled', 'completed']
 
             if new_status in allowed_statuses:
                 old_status = booking.status
