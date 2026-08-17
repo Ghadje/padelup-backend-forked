@@ -49,19 +49,41 @@ from rest_framework.authtoken.models import Token
 from rest_framework.pagination import PageNumberPagination
 
 
+def is_admin_user(user):
+    """
+    Check if user has full administrative privileges.
+    A user is an admin if they are a superuser, staff member, or have profile.role == 'admin'.
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser or user.is_staff:
+        return True
+    try:
+        return getattr(user, 'profile', None) and user.profile.role == 'admin'
+    except Exception:
+        return False
+
+
+def is_manager_or_admin(user):
+    """
+    Check if user is a manager or admin.
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if is_admin_user(user):
+        return True
+    try:
+        return getattr(user, 'profile', None) and user.profile.role in ['admin', 'manager']
+    except Exception:
+        return False
+
+
 class IsAdminUserRole(permissions.BasePermission):
     """
-    Allows access only to admin users (superusers or profile.role == 'admin').
+    Allows access only to admin users (superusers, staff, or profile.role == 'admin').
     """
     def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if request.user.is_superuser:
-            return True
-        try:
-            return request.user.profile.role == 'admin'
-        except Exception:
-            return False
+        return is_admin_user(request.user)
 
 
 class IsManagerUserRole(permissions.BasePermission):
@@ -69,14 +91,8 @@ class IsManagerUserRole(permissions.BasePermission):
     Allows access only to managers or admins.
     """
     def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if request.user.is_superuser:
-            return True
-        try:
-            return request.user.profile.role in ['admin', 'manager']
-        except Exception:
-            return False
+        return is_manager_or_admin(request.user)
+
 
 import random
 
@@ -679,11 +695,11 @@ class ClubListView(APIView):
         # Base queryset
         clubs = Club.objects.all()
 
-        # If user is a manager, only show clubs they manage
-        if request.user.is_authenticated:
+        # If user is a manager (and not an admin), only show clubs they manage
+        if request.user.is_authenticated and not is_admin_user(request.user):
             try:
                 profile = request.user.profile
-                if profile.role == 'manager' and not request.user.is_superuser:
+                if profile.role == 'manager':
                     clubs = clubs.filter(manager=request.user)
             except Exception:
                 pass
@@ -766,19 +782,14 @@ class ClubListView(APIView):
         if not request.user.is_authenticated:
             return Response({'error': 'Authentification requise'}, status=status.HTTP_401_UNAUTHORIZED)
             
-        try:
-            profile = request.user.profile
-            if profile.role not in ['admin', 'manager'] and not request.user.is_superuser:
-                return Response({'error': 'Seuls les administrateurs et managers peuvent créer des clubs'}, status=status.HTTP_403_FORBIDDEN)
-        except Exception:
-            if not request.user.is_superuser:
-                return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
+        if not is_manager_or_admin(request.user):
+            return Response({'error': 'Seuls les administrateurs et managers peuvent créer des clubs'}, status=status.HTTP_403_FORBIDDEN)
 
         # Build plain dict so we can modify it safely without deep-copying file uploads
         data = {k: v for k, v in request.data.items() if k != 'primary_photo'}
         
-        # If user is a manager, force them as the manager of the new club
-        if not request.user.is_superuser and request.user.profile.role == 'manager':
+        # If user is a manager (and not an admin), force them as the manager of the new club
+        if not is_admin_user(request.user):
             data['manager'] = request.user.id
 
         serializer = ClubSerializer(data=data)
@@ -798,12 +809,10 @@ def check_club_manager_permission(user, club):
     """Check if user has permission to manage a club"""
     if not user.is_authenticated:
         return False
-    if user.is_superuser:
+    if is_admin_user(user):
         return True
     try:
         profile = user.profile
-        if profile.role == 'admin':
-            return True
         if profile.role == 'manager' and club.manager == user:
             return True
     except Exception:
@@ -882,14 +891,7 @@ class ClubDetailView(APIView):
         # Managers usually shouldn't delete clubs, only Admins
         try:
             club = Club.objects.get(id=club_id)
-            # Only Admin or Superuser can delete clubs
-            is_admin = request.user.is_superuser
-            try:
-                if not is_admin and request.user.profile.role == 'admin':
-                    is_admin = True
-            except: pass
-
-            if not is_admin:
+            if not is_admin_user(request.user):
                 return Response({'error': 'Seuls les administrateurs peuvent supprimer des clubs'}, status=status.HTTP_403_FORBIDDEN)
 
             club.delete()
@@ -912,10 +914,10 @@ class CourtListView(APIView):
             club = Club.objects.get(id=club_id)
 
             # Check manager permission
-            if request.user.is_authenticated:
+            if request.user.is_authenticated and not is_admin_user(request.user):
                 try:
                     profile = request.user.profile
-                    if profile.role == 'manager' and not request.user.is_superuser:
+                    if profile.role == 'manager':
                         if club.manager != request.user:
                              return Response({'error': 'Vous ne gérez pas ce club'}, status=status.HTTP_403_FORBIDDEN)
                 except Exception:
@@ -1001,20 +1003,21 @@ class BookingListView(APIView):
         bookings = Booking.objects.all()
 
         if request.user.is_authenticated:
-            try:
-                profile = request.user.profile
-                if profile.role == 'admin' or request.user.is_superuser:
-                    # Admin sees all bookings
-                    pass
-                elif profile.role == 'manager':
-                    # Manager sees bookings for their own clubs
-                    bookings = bookings.filter(court__club__manager=request.user)
-                else:
-                    # Players see only their own bookings
+            if is_admin_user(request.user):
+                # Admin sees all bookings
+                pass
+            else:
+                try:
+                    profile = request.user.profile
+                    if profile.role == 'manager':
+                        # Manager sees bookings for their own clubs
+                        bookings = bookings.filter(court__club__manager=request.user)
+                    else:
+                        # Players see only their own bookings
+                        bookings = bookings.filter(user=request.user)
+                except Exception:
+                    # Fallback to only user's bookings if profile error
                     bookings = bookings.filter(user=request.user)
-            except Exception:
-                # Fallback to only user's bookings if profile error
-                bookings = bookings.filter(user=request.user)
         else:
             return Response({'error': 'Authentification requise'}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -1076,7 +1079,7 @@ class BookingDetailView(APIView):
         try:
             booking = Booking.objects.get(id=booking_id)
             # Check permission
-            if booking.user != request.user and not request.user.is_staff:
+            if booking.user != request.user and not is_admin_user(request.user):
                 return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
 
             booking.update_status()
@@ -1090,12 +1093,7 @@ class BookingDetailView(APIView):
         try:
             booking = Booking.objects.get(id=booking_id)
             # Check permission
-            is_admin = request.user.is_superuser or request.user.is_staff
-            try:
-                if not is_admin and request.user.profile.role == 'admin':
-                    is_admin = True
-            except Exception:
-                pass
+            is_admin = is_admin_user(request.user)
 
             if booking.user != request.user and not is_admin:
                 return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
@@ -1141,7 +1139,7 @@ class BookingDetailView(APIView):
         try:
             booking = Booking.objects.get(id=booking_id)
             # Check permission
-            if booking.user != request.user and not request.user.is_staff:
+            if booking.user != request.user and not is_admin_user(request.user):
                 return Response({'error': 'Permission refusée'}, status=status.HTTP_403_FORBIDDEN)
 
             booking.status = 'cancelled'
@@ -1190,10 +1188,10 @@ class MatchListView(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         # Role-based filtering for managers in dashboard
-        if request.user.is_authenticated:
+        if request.user.is_authenticated and not is_admin_user(request.user):
             try:
                 profile = request.user.profile
-                if profile.role == 'manager' and not request.user.is_superuser:
+                if profile.role == 'manager':
                     # In dashboard context, restrict matches to their managed clubs
                     if request.query_params.get('dashboard') == 'true':
                         matches = matches.filter(club__manager=request.user)
@@ -1351,7 +1349,7 @@ class MatchDetailView(APIView):
             match = Match.objects.get(id=match_id)
 
             # Check permission
-            is_admin = request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == 'admin')
+            is_admin = is_admin_user(request.user)
             if match.organizer != request.user and not is_admin:
                 return Response({'error': 'Seul l\'organisateur ou un administrateur peut modifier le match'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -1395,7 +1393,7 @@ class MatchDetailView(APIView):
             match = Match.objects.get(id=match_id)
 
             # Check permission
-            is_admin = request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == 'admin')
+            is_admin = is_admin_user(request.user)
             if match.organizer != request.user and not is_admin:
                 return Response({'error': 'Seul l\'organisateur ou un administrateur peut supprimer le match'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -2308,6 +2306,7 @@ class UserDetailManagementView(APIView):
             if 'first_name' in request.data: user.first_name = request.data['first_name']
             if 'last_name' in request.data: user.last_name = request.data['last_name']
             if 'is_active' in request.data: user.is_active = request.data['is_active']
+            if 'is_staff' in request.data: user.is_staff = request.data['is_staff']
             user.save()
 
             if 'profile' in request.data and hasattr(user, 'profile'):
@@ -2315,7 +2314,7 @@ class UserDetailManagementView(APIView):
                 if 'right-handed' in p_data and 'right_handed' not in p_data:
                     p_data['right_handed'] = p_data['right-handed']
                 profile_fields = [
-                    'full_name', 'phone_number', 'skill_level', 'evaluation_type', 
+                    'role', 'full_name', 'phone_number', 'skill_level', 'evaluation_type', 
                     'bio', 'location', 'is_verified', 'rating_points', 
                     'tier_level', 'tier_name', 'public_skill_level', 'right_handed'
                 ]
