@@ -31,8 +31,8 @@ class Profile(models.Model):
         default=5
     )
     EVALUATION_TYPE_CHOICES = [
-        ('new', 'Nouveau (1-8)'),
-        ('old', 'Ancien (1-10)'),
+        ('new', 'Échelle 8 Niveaux (FFT)'),
+        ('old', 'Échelle 10 Niveaux'),
     ]
     evaluation_type = models.CharField(max_length=10, choices=EVALUATION_TYPE_CHOICES, default='new')
     ROLE_CHOICES = [
@@ -56,20 +56,34 @@ class Profile(models.Model):
         return f"{self.user.username}'s profile"
 
     def get_tier_name(self):
-        """Get tier name based on tier_level"""
-        tier_names = {
-            1: "Découverte",
-            2: "Initiation",
-            3: "Loisir",
-            4: "Partenaire",
-            5: "Adversaire",
-            6: "Stratège",
-            7: "Perfectionniste",
-            8: "Challenger",
-            9: "Compétiteur",
-            10: "Élite"
-        }
-        return tier_names.get(self.tier_level, "Découverte")
+        """Get tier/level name based on evaluation_type and skill_level (or tier_level)"""
+        level = self.skill_level or self.tier_level or 1
+        if self.evaluation_type == 'old':
+            tier_names_10 = {
+                1: "Découverte",
+                2: "Initiation",
+                3: "Loisir",
+                4: "Partenaire",
+                5: "Adversaire",
+                6: "Stratège",
+                7: "Perfectionniste",
+                8: "Challenger",
+                9: "Compétiteur",
+                10: "Élite"
+            }
+            return tier_names_10.get(level, "Découverte")
+        else:
+            tier_names_8 = {
+                1: "Débutant",
+                2: "Perfectionnement",
+                3: "Élémentaire",
+                4: "Intermédiaire",
+                5: "Confirmé",
+                6: "Avancé",
+                7: "Expert",
+                8: "Élite"
+            }
+            return tier_names_8.get(level, "Débutant")
 
     def update_public_rating(self):
         """Calculate and update the public rating based on received ratings"""
@@ -83,9 +97,8 @@ class Profile(models.Model):
             self.public_skill_level = round(avg_rating, 1)
             self.total_skill_ratings = ratings.count()
             self.rating_points = sum_ratings if sum_ratings else 0
-            # Tier level is based on average rating (1-10 scale)
-            # Round the average to nearest integer for tier
-            self.tier_level = min(10, max(1, round(avg_rating)))
+            max_tier = 10 if self.evaluation_type == 'old' else 8
+            self.tier_level = min(max_tier, max(1, round(avg_rating)))
             self.save()
 
 
@@ -383,6 +396,19 @@ class Match(models.Model):
 
         if not self.title:
             self.title = f"Match {self.get_match_type_display()}"
+
+        # Synchronize dual evaluation grille
+        eval_type = self.evaluation_type or 'new'
+        if eval_type == 'new':
+            self.min_skill_level_new = self.min_skill_level
+            self.max_skill_level_new = self.max_skill_level
+            self.min_skill_level_old = max(1, min(10, round(self.min_skill_level * 10 / 8)))
+            self.max_skill_level_old = max(1, min(10, round(self.max_skill_level * 10 / 8)))
+        else:
+            self.min_skill_level_old = self.min_skill_level
+            self.max_skill_level_old = self.max_skill_level
+            self.min_skill_level_new = max(1, min(8, round(self.min_skill_level * 8 / 10)))
+            self.max_skill_level_new = max(1, min(8, round(self.max_skill_level * 8 / 10)))
 
         super().save(*args, **kwargs)
 
