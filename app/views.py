@@ -247,16 +247,23 @@ class LoginView(APIView):
             username = serializer.validated_data.get('username')
             password = serializer.validated_data.get('password')
 
-            # Try to authenticate with email or username
+            identifier = (username or email or '').strip()
             user = None
-            if email:
+
+            if identifier:
+                # 1. Search for matching user by email or username (case-insensitive)
                 try:
-                    user_obj = User.objects.get(email=email)
-                    user = authenticate(username=user_obj.username, password=password)
-                except User.DoesNotExist:
+                    user_obj = User.objects.filter(
+                        Q(username__iexact=identifier) | Q(email__iexact=identifier)
+                    ).first()
+                    if user_obj:
+                        user = authenticate(username=user_obj.username, password=password)
+                except Exception:
                     pass
-            elif username:
-                user = authenticate(username=username, password=password)
+
+                # 2. Direct authenticate fallback
+                if not user:
+                    user = authenticate(username=identifier, password=password)
 
             if user:
                 login(request, user)

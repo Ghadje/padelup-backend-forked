@@ -789,14 +789,13 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 class LoginSerializer(serializers.Serializer):
     """Login serializer"""
-    email = serializers.EmailField(required=False)
-    username = serializers.CharField(required=False)
+    email = serializers.CharField(required=False, allow_blank=True)
+    username = serializers.CharField(required=False, allow_blank=True)
     password = serializers.CharField(required=True, write_only=True)
 
     def validate(self, attrs):
         email = attrs.get('email')
         username = attrs.get('username')
-        password = attrs.get('password')
 
         if not email and not username:
             raise serializers.ValidationError("L'e-mail ou le nom d'utilisateur doit être fourni.")
