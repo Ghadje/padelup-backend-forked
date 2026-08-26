@@ -721,6 +721,22 @@ class ClubListView(APIView):
         if min_rating:
             clubs = clubs.filter(rating__gte=float(min_rating))
 
+        # Bounding box filter (for map viewport exploration)
+        min_lat = request.query_params.get('min_lat')
+        max_lat = request.query_params.get('max_lat')
+        min_lng = request.query_params.get('min_lng')
+        max_lng = request.query_params.get('max_lng')
+        if min_lat and max_lat and min_lng and max_lng:
+            try:
+                clubs = clubs.filter(
+                    latitude__gte=float(min_lat),
+                    latitude__lte=float(max_lat),
+                    longitude__gte=float(min_lng),
+                    longitude__lte=float(max_lng)
+                )
+            except (ValueError, TypeError):
+                pass
+
         # Sort by distance if coordinates provided
         if lat and lng:
             try:
@@ -770,8 +786,14 @@ class ClubListView(APIView):
                 pass
 
         # Paginate
+        page_size_param = request.query_params.get('page_size', 20)
+        try:
+            page_size = min(int(page_size_param), 100)
+        except (ValueError, TypeError):
+            page_size = 20
+
         paginator = PageNumberPagination()
-        paginator.page_size = 20
+        paginator.page_size = page_size
         result_page = paginator.paginate_queryset(clubs, request)
 
         serializer = ClubSerializer(result_page, many=True, context={'request': request})
