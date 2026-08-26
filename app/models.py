@@ -343,7 +343,7 @@ class Match(models.Model):
 
     # Location and timing
     club = models.ForeignKey(Club, on_delete=models.CASCADE, related_name='matches')
-    court = models.ForeignKey(Court, on_delete=models.CASCADE, related_name='matches')
+    court = models.ForeignKey(Court, on_delete=models.SET_NULL, related_name='matches', null=True, blank=True)
     booking = models.OneToOneField(Booking, on_delete=models.CASCADE, related_name='match', null=True, blank=True)
 
     date_time = models.DateTimeField()
@@ -484,11 +484,11 @@ class Match(models.Model):
     def get_location_info(self):
         """Get match location info matching Flutter MatchLocation"""
         return {
-            'club_name': self.club.name,
-            'court_name': self.court.name,
-            'address': self.club.address,
-            'latitude': float(self.club.latitude),
-            'longitude': float(self.club.longitude)
+            'club_name': self.club.name if self.club else '',
+            'court_name': self.court.name if self.court else '',
+            'address': self.club.address if self.club else '',
+            'latitude': float(self.club.latitude) if self.club else 0.0,
+            'longitude': float(self.club.longitude) if self.club else 0.0
         }
 
     def mark_winners(self, winner_ids, loser_ids):
