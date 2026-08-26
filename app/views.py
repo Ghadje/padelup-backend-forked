@@ -580,11 +580,12 @@ class ProfileView(APIView):
             data['right_handed'] = request.data.get('right-handed')
 
         # Handle avatar_url (e.g. DiceBear URL) sent as a text field
-        avatar_url = request.data.get('avatar_url')
+        avatar_url = request.data.get('avatar_url') or request.data.get('external_avatar_url')
         if isinstance(avatar_url, list):
             avatar_url = avatar_url[0] if avatar_url else None
-        if avatar_url:
-            data['external_avatar_url'] = avatar_url
+        if avatar_url and isinstance(avatar_url, str):
+            import urllib.parse
+            data['external_avatar_url'] = urllib.parse.quote(avatar_url.strip(), safe=':/?#[]@!$&\'()*+,;=')
 
         # Upload file avatar to Freeimage.host and store URL
         if 'avatar' in request.FILES:
