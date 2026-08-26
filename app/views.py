@@ -249,6 +249,7 @@ class LoginView(APIView):
 
             identifier = (username or email or '').strip()
             user = None
+            user_obj = None
 
             if identifier:
                 # 1. Search for matching user by email or username (case-insensitive)
@@ -266,6 +267,8 @@ class LoginView(APIView):
                     user = authenticate(username=identifier, password=password)
 
             if user:
+                if not user.is_active:
+                    return Response({'error': 'Ce compte est désactivé.'}, status=status.HTTP_401_UNAUTHORIZED)
                 login(request, user)
                 token, created = Token.objects.get_or_create(user=user)
                 return Response({
@@ -274,7 +277,13 @@ class LoginView(APIView):
                     'token': token.key,
                     'message': 'Connexion réussie'
                 }, status=status.HTTP_200_OK)
-            return Response({'error': 'Identifiants invalides'}, status=status.HTTP_401_UNAUTHORIZED)
+
+            # Detailed error explanation
+            if user_obj:
+                return Response({'error': 'Mot de passe incorrect.'}, status=status.HTTP_401_UNAUTHORIZED)
+            else:
+                return Response({'error': "Aucun compte n'est associé à cet e-mail ou nom d'utilisateur."}, status=status.HTTP_401_UNAUTHORIZED)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
