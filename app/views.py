@@ -102,7 +102,12 @@ from .models import (
     PostReply, CommunityGroup, FriendRequest, Friendship, PrivateMessage,
     BlockedUser, PasswordResetCode, EmailVerificationCode
 )
-from .email_service import send_welcome_email, send_password_reset_email, send_verification_email
+from .email_service import (
+    send_welcome_email, send_password_reset_email, send_verification_email,
+    send_match_creation_confirmation, send_match_join_confirmation,
+    send_player_joined_organizer_email, send_player_kicked_email,
+    send_match_cancelled_email,
+)
 from .serializers import (
     UserSerializer, ProfileSerializer, ProfileSetupSerializer, ProfileUpdateSerializer,
     PlayerStatsSerializer, ClubSerializer, CourtSerializer, BookingSerializer,
@@ -1348,6 +1353,13 @@ class MatchListView(APIView):
 
             # Pass context when serializing the response
             response_serializer = MatchSerializer(match, context={'request': request})
+
+            # Send confirmation email to match organizer
+            try:
+                send_match_creation_confirmation(request.user, match)
+            except Exception as e:
+                logger.error(f"Failed to send match creation email: {e}")
+
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1414,6 +1426,12 @@ class MatchDetailView(APIView):
                         match=match,
                         message=f'Le match "{match.title}" a été annulé'
                     )
+                    # Send cancellation email to confirmed players (excluding the organizer who cancelled)
+                    if user != request.user:
+                        try:
+                            send_match_cancelled_email(user, match)
+                        except Exception as e:
+                            logger.error(f"Failed to send match cancelled email: {e}")
 
                 return Response({'message': 'Match annulé avec succès'}, status=status.HTTP_200_OK)
 
@@ -1435,6 +1453,14 @@ class MatchDetailView(APIView):
             is_admin = is_admin_user(request.user)
             if match.organizer != request.user and not is_admin:
                 return Response({'error': 'Seul l\'organisateur ou un administrateur peut supprimer le match'}, status=status.HTTP_403_FORBIDDEN)
+
+            # Notify confirmed participants via email before deletion
+            for participant in match.participants.filter(status='confirmed'):
+                if participant.user and participant.user != request.user:
+                    try:
+                        send_match_cancelled_email(participant.user, match)
+                    except Exception as e:
+                        logger.error(f"Failed to send match cancelled email: {e}")
 
             match.delete()
             return Response({'message': 'Match supprimé avec succès'}, status=status.HTTP_204_NO_CONTENT)
@@ -1491,7 +1517,7 @@ class MatchJoinView(APIView):
                 match.is_open = False
                 match.save()
 
-            # Notify organizer
+            # Notify organizer in-app
             Notification.objects.create(
                 user=match.organizer,
                 type='match_accepted',
@@ -1499,9 +1525,18 @@ class MatchJoinView(APIView):
                 message=f'{request.user.username} a rejoint votre match "{match.title}"'
             )
 
-            # Send confirmation email
-            from .email_service import send_match_join_confirmation
-            send_match_join_confirmation(request.user, match)
+            # Send confirmation email to the joining player
+            try:
+                send_match_join_confirmation(request.user, match)
+            except Exception as e:
+                logger.error(f"Failed to send match join confirmation email: {e}")
+
+            # Send notification email to the match organizer
+            if match.organizer and match.organizer != request.user:
+                try:
+                    send_player_joined_organizer_email(match.organizer, request.user, match)
+                except Exception as e:
+                    logger.error(f"Failed to send player joined organizer email: {e}")
 
             return Response(MatchParticipantSerializer(participant).data, status=status.HTTP_201_CREATED)
         except Match.DoesNotExist:
@@ -1551,13 +1586,22 @@ class MatchParticipantManageView(APIView):
             if not participant:
                 return Response({'error': 'Participant non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
-            # Notify the removed participant
+            removed_user = participant.user
+
+            # Notify the removed participant in-app
             Notification.objects.create(
                 user_id=participant_id,
                 type='removed_from_match',
                 match=match,
                 message=f'Vous avez été retiré du match "{match.title}"'
             )
+
+            # Send email to the removed player
+            if removed_user:
+                try:
+                    send_player_kicked_email(removed_user, match, organizer=request.user)
+                except Exception as e:
+                    logger.error(f"Failed to send player removed email: {e}")
 
             participant.delete()
 
