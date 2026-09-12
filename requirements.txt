@@ -9,3 +9,5 @@ whitenoise[brotli]
 pytz
 requests
 sendgrid
+pyjwt[crypto]>=2.8.0
+cryptography>=41.0.0

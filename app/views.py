@@ -384,6 +384,123 @@ class GoogleLoginView(APIView):
             return Response({'error': f'Erreur de connexion Google: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class AppleLoginView(APIView):
+    """Sign in with Apple API"""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        identity_token = request.data.get('identity_token')
+        if not identity_token:
+            return Response({'error': 'identity_token requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            import os
+            import re
+            import jwt
+            from jwt import PyJWKClient
+
+            # Verify Apple JWT using Apple's JWKS
+            jwks_client = PyJWKClient("https://appleid.apple.com/auth/keys")
+            signing_key = jwks_client.get_signing_key_from_jwt(identity_token)
+
+            allowed_audiences = [
+                a.strip() for a in os.environ.get(
+                    'APPLE_CLIENT_ID',
+                    'com.padelup.padelup-new,com.padelup.padelUp'
+                ).split(',') if a.strip()
+            ]
+
+            payload = jwt.decode(
+                identity_token,
+                signing_key.key,
+                algorithms=["RS256"],
+                audience=allowed_audiences,
+                issuer="https://appleid.apple.com",
+                options={"verify_exp": True},
+            )
+
+            apple_sub = payload.get('sub')
+            token_email = payload.get('email')
+            email = token_email or request.data.get('email')
+            given_name = request.data.get('first_name') or ''
+            family_name = request.data.get('last_name') or ''
+
+            if not apple_sub:
+                return Response({'error': 'Token Apple invalide: identifiant utilisateur manquant'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Find or create user
+            is_new_user = False
+            user = None
+            if email:
+                user = User.objects.filter(email__iexact=email).first()
+
+            if not user and apple_sub:
+                user = User.objects.filter(username=f"apple_{apple_sub[:20]}").first()
+
+            if not user:
+                is_new_user = True
+
+                # Generate unique friendly username from email prefix or apple_sub
+                if email:
+                    base_username = email.split('@')[0]
+                else:
+                    base_username = f"apple_{apple_sub[:8]}"
+
+                base_username = re.sub(r'[^a-zA-Z0-9_.-]', '', base_username)
+                username = base_username
+
+                counter = 1
+                while User.objects.filter(username=username).exists():
+                    username = f"{base_username}_{counter}"
+                    counter += 1
+
+                user_email = email if email else f"{username}@privaterelay.appleid.com"
+                password = User.objects.make_random_password()
+                user = User.objects.create_user(
+                    username=username,
+                    email=user_email,
+                    password=password,
+                    first_name=given_name,
+                    last_name=family_name
+                )
+                user.is_active = True  # Apple login is auto-verified
+                user.save()
+            else:
+                if not user.is_active:
+                    user.is_active = True
+                    user.save()
+
+            # Ensure profile exists
+            profile, profile_created = Profile.objects.get_or_create(user=user)
+
+            # If profile was newly created, or if full_name is empty, populate it
+            full_name = f"{given_name} {family_name}".strip()
+            if full_name and (profile_created or not profile.full_name):
+                profile.full_name = full_name
+                profile.save(update_fields=['full_name'])
+
+            # Ensure player stats exists
+            PlayerStats.objects.get_or_create(user=user)
+
+            # Generate/Get Token
+            token, created = Token.objects.get_or_create(user=user)
+
+            return Response({
+                'user': UserSerializer(user).data,
+                'profile': ProfileSerializer(profile).data,
+                'token': token.key,
+                'is_new_user': is_new_user,
+                'message': 'Connexion Apple réussie'
+            }, status=status.HTTP_200_OK)
+
+        except jwt.PyJWTError as e:
+            logger.error(f"Apple JWT verification failed: {e}\n{traceback.format_exc()}")
+            return Response({'error': f'Jeton Apple invalide ou expiré: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Apple Login error: {e}\n{traceback.format_exc()}")
+            return Response({'error': f'Erreur de connexion Apple: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class LogoutView(APIView):
     """User logout API"""
     permission_classes = [IsAuthenticated]
