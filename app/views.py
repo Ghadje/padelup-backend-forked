@@ -1765,6 +1765,11 @@ class MatchParticipantManageView(APIView):
             if match.organizer != request.user:
                 return Response({'error': 'Seul l\'organisateur peut retirer des participants'}, status=status.HTTP_403_FORBIDDEN)
 
+            # Cannot remove player after match has ended or started
+            match_start = match.get_match_datetime_start()
+            if match.status in ['completed', 'cancelled'] or (match_start and match_start < timezone.now()):
+                return Response({'error': 'Impossible de retirer un joueur d\'un match déjà commencé ou terminé'}, status=status.HTTP_400_BAD_REQUEST)
+
             # Find and remove participant
             participant = MatchParticipant.objects.filter(
                 match=match,
