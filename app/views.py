@@ -98,11 +98,13 @@ import random
 
 from .models import (
     Profile, PlayerStats, Club, Court, Booking, Match, MatchParticipant,
-    MatchMessage, Rating, CourtRating, Notification, CommunityPost,
+    MatchMessage, Rating, CourtRating, Notification, DeviceToken, CommunityPost,
     PostReply, CommunityGroup, FriendRequest, Friendship, PrivateMessage,
     BlockedUser, PasswordResetCode, EmailVerificationCode
 )
+from .fcm_service import create_notification, send_push_notification
 from .email_service import (
+
     send_welcome_email, send_password_reset_email, send_verification_email,
     send_match_creation_confirmation, send_match_join_confirmation,
     send_player_joined_organizer_email, send_player_kicked_email,
@@ -1225,7 +1227,36 @@ class BookingListView(APIView):
             from .email_service import send_booking_confirmation
             send_booking_confirmation(request.user, booking)
 
+            # Send in-app notification to player
+            try:
+                date_str = booking.date.strftime('%d/%m/%Y')
+                start_str = booking.start_time.strftime('%H:%M')
+                club = booking.court.club
+                create_notification(
+                    user=request.user,
+                    notification_type='booking_confirmed',
+                    message=f"Votre réservation au club {club.name} le {date_str} à {start_str} a été confirmée !",
+                    club=club,
+                    target='mobile',
+                    title="Réservation confirmée"
+                )
+
+                # Notify club manager on dashboard
+                if club.manager and club.manager != request.user:
+                    player_name = (request.user.profile.full_name or request.user.username) if hasattr(request.user, 'profile') else request.user.username
+                    create_notification(
+                        user=club.manager,
+                        notification_type='new_booking',
+                        message=f"Nouvelle réservation : {booking.court.name} le {date_str} à {start_str} par {player_name}",
+                        club=club,
+                        target='dashboard',
+                        title="Nouvelle réservation reçue"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to send booking notifications: {e}")
+
             return Response(BookingSerializer(booking).data, status=status.HTTP_201_CREATED)
+
         from .exceptions import extract_first_error
         err_msg = extract_first_error(serializer.errors)
         return Response({'error': err_msg, 'detail': err_msg}, status=status.HTTP_400_BAD_REQUEST)
@@ -1279,16 +1310,19 @@ class BookingDetailView(APIView):
 
                     # Send in-app notification
                     try:
-                        from .models import Notification
                         date_str = booking.date.strftime('%d/%m/%Y')
-                        msg = f"Votre réservation au club {booking.court.club.name} le {date_str} à {booking.start_time.strftime('%H:%M')} a été confirmée !"
-                        Notification.objects.create(
+                        start_str = booking.start_time.strftime('%H:%M')
+                        msg = f"Votre réservation au club {booking.court.club.name} le {date_str} à {start_str} a été confirmée !"
+                        create_notification(
                             user=booking.user,
-                            type='booking_confirmed',
-                            message=msg
+                            notification_type='booking_confirmed',
+                            message=msg,
+                            club=booking.court.club,
+                            target='mobile',
+                            title="Réservation confirmée"
                         )
                     except Exception as e:
-                        print(f"Failed to create app notification: {e}")
+                        logger.error(f"Failed to create app notification: {e}")
 
                 return Response(BookingSerializer(booking).data, status=status.HTTP_200_OK)
             return Response({'error': 'Statut invalide'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1305,7 +1339,38 @@ class BookingDetailView(APIView):
 
             booking.status = 'cancelled'
             booking.save()
+
+            # Notify user & manager
+            try:
+                date_str = booking.date.strftime('%d/%m/%Y')
+                start_str = booking.start_time.strftime('%H:%M')
+                club = booking.court.club
+                # If cancelled by manager/admin, notify player
+                if request.user != booking.user:
+                    create_notification(
+                        user=booking.user,
+                        notification_type='booking_cancelled',
+                        message=f"Votre réservation au club {club.name} le {date_str} à {start_str} a été annulée.",
+                        club=club,
+                        target='mobile',
+                        title="Réservation annulée"
+                    )
+                # If cancelled by player, notify club manager on dashboard
+                elif club.manager:
+                    player_name = (booking.user.profile.full_name or booking.user.username) if hasattr(booking.user, 'profile') else booking.user.username
+                    create_notification(
+                        user=club.manager,
+                        notification_type='booking_cancelled',
+                        message=f"Réservation annulée : {booking.court.name} le {date_str} à {start_str} par {player_name}",
+                        club=club,
+                        target='dashboard',
+                        title="Réservation annulée"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to send booking cancellation notifications: {e}")
+
             return Response({'message': 'Réservation annulée avec succès'}, status=status.HTTP_200_OK)
+
         except Booking.DoesNotExist:
             return Response({'error': 'Réservation non trouvée'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1537,12 +1602,15 @@ class MatchDetailView(APIView):
                         users_to_notify.add(participant.user)
 
                 for user in users_to_notify:
-                    Notification.objects.create(
+                    create_notification(
                         user=user,
-                        type='match_cancelled',
+                        notification_type='match_cancelled',
                         match=match,
-                        message=f'Le match "{match.title}" a été annulé'
+                        message=f'Le match "{match.title}" a été annulé',
+                        target='mobile',
+                        title="Match annulé"
                     )
+
                     # Send cancellation email to confirmed players (excluding the organizer who cancelled)
                     if user != request.user:
                         try:
@@ -1634,13 +1702,16 @@ class MatchJoinView(APIView):
                 match.is_open = False
                 match.save()
 
-            # Notify organizer in-app
-            Notification.objects.create(
+            # Notify organizer in-app & push
+            create_notification(
                 user=match.organizer,
-                type='match_accepted',
+                notification_type='match_accepted',
                 match=match,
-                message=f'{request.user.username} a rejoint votre match "{match.title}"'
+                message=f'{request.user.username} a rejoint votre match "{match.title}"',
+                target='mobile',
+                title="Joueur rejoint"
             )
+
 
             # Send confirmation email to the joining player
             try:
@@ -1705,13 +1776,16 @@ class MatchParticipantManageView(APIView):
 
             removed_user = participant.user
 
-            # Notify the removed participant in-app
-            Notification.objects.create(
-                user_id=participant_id,
-                type='removed_from_match',
+            # Notify the removed participant in-app & push
+            create_notification(
+                user=removed_user,
+                notification_type='match_cancelled',
                 match=match,
-                message=f'Vous avez été retiré du match "{match.title}"'
+                message=f'Vous avez été retiré du match "{match.title}"',
+                target='mobile',
+                title="Retiré du match"
             )
+
 
             # Send email to the removed player
             if removed_user:
@@ -1808,13 +1882,16 @@ class MatchInviteView(APIView):
                         })
                         continue
 
-                    # Create notification
-                    Notification.objects.create(
+                    # Create notification & send push
+                    create_notification(
                         user=friend,
-                        type='match_invite',
+                        notification_type='match_invite',
                         match=match,
-                        message=f'{request.user.username} vous a invité à rejoindre "{match.title}"'
+                        message=f'{request.user.username} vous a invité à rejoindre "{match.title}"',
+                        target='mobile',
+                        title="Invitation à un match"
                     )
+
 
                     results.append({
                         'user_id': friend_id,
@@ -1945,12 +2022,15 @@ class MatchFinishView(APIView):
             if success:
                 # Notify all participants that match is finished
                 for participant in match.participants.filter(status='confirmed'):
-                    Notification.objects.create(
+                    create_notification(
                         user=participant.user,
-                        type='match_reminder',  # Using existing type
+                        notification_type='match_reminder',
                         match=match,
-                        message=f'Le match "{match.title}" est terminé. N\'oubliez pas d\'évaluer les autres joueurs !'
+                        message=f'Le match "{match.title}" est terminé. N\'oubliez pas d\'évaluer les autres joueurs !',
+                        target='mobile',
+                        title="Match terminé"
                     )
+
 
                 return Response({
                     'message': 'Match marqué comme terminé avec succès',
@@ -2257,12 +2337,14 @@ class FriendRequestView(APIView):
                 message=message
             )
 
-            # Send notification
-            Notification.objects.create(
+            # Send notification & push
+            create_notification(
                 user=receiver,
-                type='friend_request',
+                notification_type='friend_request',
                 friend_request=friend_request,
-                message=f'{request.user.username} vous a envoyé une demande d\'ami'
+                message=f'{request.user.username} vous a envoyé une demande d\'ami',
+                target='mobile',
+                title="Demande d'ami"
             )
 
             return Response(FriendRequestSerializer(friend_request).data, status=status.HTTP_201_CREATED)
@@ -2295,13 +2377,16 @@ class FriendRequestManageView(APIView):
                 friend_request.status = 'accepted'
                 friend_request.save()
 
-                # Notify sender
-                Notification.objects.create(
+                # Notify sender in-app & push
+                create_notification(
                     user=friend_request.sender,
-                    type='friend_accepted',
+                    notification_type='friend_accepted',
                     friend_request=friend_request,
-                    message=f'{request.user.username} a accepté votre demande d\'ami'
+                    message=f'{request.user.username} a accepté votre demande d\'ami',
+                    target='mobile',
+                    title="Demande d'ami acceptée"
                 )
+
 
                 return Response({'message': 'Demande d\'ami acceptée'}, status=status.HTTP_200_OK)
 
@@ -2359,14 +2444,18 @@ class NotificationView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Get user's notifications"""
+        """Get user's notifications (supports unread_only and target filters)"""
         unread_only = request.query_params.get('unread_only', 'false').lower() == 'true'
+        target = request.query_params.get('target')
 
         # Delete notifications older than 90 days for this user
         three_months_ago = timezone.now() - timedelta(days=90)
         Notification.objects.filter(user=request.user, created_at__lt=three_months_ago).delete()
 
         notifications = Notification.objects.filter(user=request.user)
+
+        if target:
+            notifications = notifications.filter(target__in=[target, 'both'])
 
         if unread_only:
             notifications = notifications.filter(is_read=False)
@@ -2386,13 +2475,92 @@ class NotificationView(APIView):
                 user=request.user
             ).update(is_read=True)
         else:
-            # Mark all as read
-            Notification.objects.filter(
-                user=request.user,
-                is_read=False
-            ).update(is_read=True)
+            # Mark all as read (optional target filter)
+            target = request.data.get('target')
+            qs = Notification.objects.filter(user=request.user, is_read=False)
+            if target:
+                qs = qs.filter(target__in=[target, 'both'])
+            qs.update(is_read=True)
 
         return Response({'message': 'Notifications marquées comme lues'}, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk=None):
+        """Delete notifications: single by url/param/body, bulk by IDs, or bulk all (with optional target filter)"""
+        notification_id = pk or request.query_params.get('id') or request.data.get('id')
+        notification_ids = request.data.get('notification_ids', [])
+        target = request.query_params.get('target') or request.data.get('target')
+
+        if notification_id:
+            deleted_count, _ = Notification.objects.filter(
+                id=notification_id,
+                user=request.user
+            ).delete()
+            if deleted_count == 0:
+                return Response({'error': 'Notification non trouvée'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'message': 'Notification supprimée', 'deleted_count': deleted_count},
+                status=status.HTTP_200_OK
+            )
+
+        if notification_ids:
+            deleted_count, _ = Notification.objects.filter(
+                id__in=notification_ids,
+                user=request.user
+            ).delete()
+            return Response(
+                {'message': f'{deleted_count} notifications supprimées', 'deleted_count': deleted_count},
+                status=status.HTTP_200_OK
+            )
+
+        # Bulk delete all notifications for this user (with optional target filter)
+        qs = Notification.objects.filter(user=request.user)
+        if target:
+            qs = qs.filter(target__in=[target, 'both'])
+        deleted_count, _ = qs.delete()
+
+        return Response(
+            {'message': 'Toutes les notifications ont été supprimées', 'deleted_count': deleted_count},
+            status=status.HTTP_200_OK
+        )
+
+
+class DeviceTokenView(APIView):
+    """Device FCM Token registration and unregistration"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """Register or update device FCM token"""
+        token = request.data.get('token')
+        device_type = request.data.get('device_type', 'android')
+
+        if not token:
+            return Response({'error': 'Token est requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+        device_token, created = DeviceToken.objects.update_or_create(
+            token=token,
+            defaults={
+                'user': request.user,
+                'device_type': device_type,
+            }
+        )
+
+        return Response({
+            'message': 'Token FCM enregistré avec succès',
+            'created': created
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request):
+        """Unregister device token on logout"""
+        token = request.data.get('token')
+        if token:
+            deleted_count, _ = DeviceToken.objects.filter(token=token, user=request.user).delete()
+        else:
+            deleted_count, _ = DeviceToken.objects.filter(user=request.user).delete()
+
+        return Response({
+            'message': f'{deleted_count} token(s) supprimé(s)'
+        }, status=status.HTTP_200_OK)
+
 
 
 # ============================================================================

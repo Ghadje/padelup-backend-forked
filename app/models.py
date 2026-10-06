@@ -634,6 +634,27 @@ class CourtRating(models.Model):
         return f"{self.rater.username} rated {self.court.name}: {self.rating}/5"
 
 
+class DeviceToken(models.Model):
+    """FCM Device tokens for push notifications"""
+    DEVICE_TYPES = [
+        ('ios', 'iOS'),
+        ('android', 'Android'),
+        ('web', 'Web'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='device_tokens')
+    token = models.CharField(max_length=500, unique=True)
+    device_type = models.CharField(max_length=10, choices=DEVICE_TYPES, default='android')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"{self.user.username} ({self.device_type}) - {self.token[:20]}..."
+
+
 class Notification(models.Model):
     """User notifications"""
     TYPE_CHOICES = [
@@ -645,10 +666,20 @@ class Notification(models.Model):
         ('friend_accepted', 'Demande d\'ami acceptée'),
         ('achievement', 'Succès déverrouillé'),
         ('booking_confirmed', 'Réservation confirmée'),
+        ('new_booking', 'Nouvelle réservation'),
+        ('booking_cancelled', 'Réservation annulée'),
+    ]
+
+    TARGET_CHOICES = [
+        ('mobile', 'Mobile'),
+        ('dashboard', 'Dashboard'),
+        ('both', 'Tous'),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
     type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    target = models.CharField(max_length=10, choices=TARGET_CHOICES, default='mobile')
+    club = models.ForeignKey('Club', on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
     match = models.ForeignKey(Match, on_delete=models.CASCADE, null=True, blank=True)
     friend_request = models.ForeignKey('FriendRequest', on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
     message = models.TextField()
@@ -660,6 +691,7 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.get_type_display()} for {self.user.username}"
+
 
 
 class CommunityPost(models.Model):

@@ -57,6 +57,7 @@ from .views import (
 
     # Notifications
     NotificationView,
+    DeviceTokenView,
 
     # Leaderboard & Stats
     LeaderboardView,
@@ -151,6 +152,10 @@ urlpatterns = [
     # NOTIFICATION ENDPOINTS
     # ============================================================================
     path('notifications/', NotificationView.as_view(), name='notifications'),
+    path('notifications/<int:pk>/', NotificationView.as_view(), name='notification_detail'),
+    path('notifications/device-token/', DeviceTokenView.as_view(), name='device_token'),
+    path('notifications/register-device/', DeviceTokenView.as_view(), name='register_device'),
+
 
     # ============================================================================
     # LEADERBOARD & STATS ENDPOINTS

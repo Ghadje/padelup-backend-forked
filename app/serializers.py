@@ -3,10 +3,11 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from .models import (
     Profile, PlayerStats, Club, Court, Booking, Match, MatchParticipant,
-    MatchMessage, Rating, CourtRating, Notification, CommunityPost,
+    MatchMessage, Rating, CourtRating, Notification, DeviceToken, CommunityPost,
     PostReply, CommunityGroup, FriendRequest, Friendship, PrivateMessage,
     BlockedUser, SavedClub
 )
+
 
 
 def get_user_avatar_url(profile, request=None):
@@ -439,19 +440,28 @@ class CourtRatingSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'court_name', 'club_name', 'rater_name', 'created_at']
 
 
+class DeviceTokenSerializer(serializers.ModelSerializer):
+    """Device token registration serializer"""
+    class Meta:
+        model = DeviceToken
+        fields = ['token', 'device_type']
+
+
 class NotificationSerializer(serializers.ModelSerializer):
     """Notification serializer"""
     match_info = serializers.SerializerMethodField()
     friend_request_info = serializers.SerializerMethodField()
+    club_info = serializers.SerializerMethodField()
     type_display = serializers.CharField(source='get_type_display', read_only=True)
 
     class Meta:
         model = Notification
         fields = [
-            'id', 'user', 'type', 'type_display', 'match', 'match_info',
-            'friend_request', 'friend_request_info', 'message', 'is_read', 'created_at'
+            'id', 'user', 'type', 'type_display', 'target', 'club', 'club_info',
+            'match', 'match_info', 'friend_request', 'friend_request_info',
+            'message', 'is_read', 'created_at'
         ]
-        read_only_fields = ['id', 'type_display', 'match_info', 'friend_request_info', 'created_at']
+        read_only_fields = ['id', 'type_display', 'match_info', 'friend_request_info', 'club_info', 'created_at']
 
     def get_match_info(self, obj):
         if obj.match:
@@ -473,6 +483,16 @@ class NotificationSerializer(serializers.ModelSerializer):
                 'status': obj.friend_request.status
             }
         return None
+
+    def get_club_info(self, obj):
+        if obj.club:
+            return {
+                'id': obj.club.id,
+                'name': obj.club.name,
+                'city': obj.club.city
+            }
+        return None
+
 
 
 class PostReplySerializer(serializers.ModelSerializer):

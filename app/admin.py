@@ -3,10 +3,11 @@ from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from .models import (
     Profile, Club, Court, Booking, Match, MatchParticipant, MatchMessage,
-    Rating, CourtRating, Notification, PlayerStats, CommunityPost, PostReply,
+    Rating, CourtRating, Notification, DeviceToken, PlayerStats, CommunityPost, PostReply,
     CommunityGroup, FriendRequest, Friendship, PrivateMessage, BlockedUser, SavedClub,
     EmailVerificationCode
 )
+
 
 
 # Define an inline admin descriptor for Profile model
@@ -95,12 +96,24 @@ class CourtRatingAdmin(admin.ModelAdmin):
     date_hierarchy = 'created_at'
 
 
+@admin.register(DeviceToken)
+class DeviceTokenAdmin(admin.ModelAdmin):
+    list_display = ['user', 'device_type', 'token_snippet', 'updated_at']
+    list_filter = ['device_type', 'created_at']
+    search_fields = ['user__username', 'token']
+
+    def token_snippet(self, obj):
+        return f"{obj.token[:25]}..." if len(obj.token) > 25 else obj.token
+    token_snippet.short_description = 'Token'
+
+
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
-    list_display = ['user', 'type', 'is_read', 'created_at']
-    list_filter = ['type', 'is_read', 'created_at']
+    list_display = ['user', 'type', 'target', 'club', 'is_read', 'created_at']
+    list_filter = ['target', 'type', 'is_read', 'created_at']
     search_fields = ['user__username', 'message']
     date_hierarchy = 'created_at'
+
 
 
 @admin.register(PlayerStats)
