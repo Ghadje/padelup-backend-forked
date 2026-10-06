@@ -27,7 +27,22 @@ if env_file.exists():
                 key, val = line.split('=', 1)
                 os.environ.setdefault(key.strip(), val.strip().strip("'").strip('"'))
 
+# Sentry Error Monitoring & Performance Tracking
+SENTRY_DSN = os.environ.get('SENTRY_DSN')
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.django import DjangoIntegration
 
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[DjangoIntegration()],
+            traces_sample_rate=0.2,
+            send_default_pii=False,
+            environment='production' if os.environ.get('DEBUG', 'True').lower() != 'true' else 'development',
+        )
+    except Exception as e:
+        print(f"Warning: Sentry initialization failed: {e}")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
