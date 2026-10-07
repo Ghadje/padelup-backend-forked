@@ -2631,10 +2631,45 @@ class UserListView(APIView):
         """Get all users with profiles"""
         users = User.objects.select_related('profile').all().order_by('-date_joined')
         
+        # Search filter
+        search = request.query_params.get('search')
+        if search:
+            search = search.strip()
+            users = users.filter(
+                Q(username__icontains=search) |
+                Q(email__icontains=search) |
+                Q(first_name__icontains=search) |
+                Q(last_name__icontains=search) |
+                Q(profile__full_name__icontains=search)
+            )
+
+        # Email filter
+        email = request.query_params.get('email')
+        if email:
+            users = users.filter(email__icontains=email.strip())
+
+        # Status filter
+        is_active = request.query_params.get('is_active')
+        if is_active in ['true', 'True', '1']:
+            users = users.filter(is_active=True)
+        elif is_active in ['false', 'False', '0']:
+            users = users.filter(is_active=False)
+
         # Role filtering
         role_filter = request.query_params.get('role')
         if role_filter:
-            users = users.filter(profile__role=role_filter)
+            if role_filter == 'admin':
+                users = users.filter(Q(profile__role='admin') | Q(is_staff=True) | Q(is_superuser=True))
+            elif role_filter == 'manager':
+                users = users.filter(profile__role='manager', is_staff=False, is_superuser=False)
+            elif role_filter == 'player':
+                users = users.filter(
+                    (Q(profile__role='player') | Q(profile__role__isnull=True) | Q(profile__isnull=True)),
+                    is_staff=False,
+                    is_superuser=False
+                )
+            else:
+                users = users.filter(profile__role=role_filter)
             
         serializer = UserDetailSerializer(users, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
