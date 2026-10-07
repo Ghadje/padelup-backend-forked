@@ -45,6 +45,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.authentication import TokenAuthentication, SessionAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.pagination import PageNumberPagination
 
@@ -59,7 +60,7 @@ def is_admin_user(user):
     if user.is_superuser or user.is_staff:
         return True
     try:
-        return getattr(user, 'profile', None) and user.profile.role == 'admin'
+        return getattr(user, 'profile', None) and user.profile.role in ['admin', 'superadmin']
     except Exception:
         return False
 
@@ -1381,6 +1382,7 @@ class BookingDetailView(APIView):
 
 class MatchListView(APIView):
     """List and create matches"""
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     permission_classes = [AllowAny]  # Allow public access to view matches
 
     def get(self, request):
@@ -1395,6 +1397,7 @@ class MatchListView(APIView):
         my_matches = request.query_params.get('my_matches', '')
         search = request.query_params.get('search', '')  # Add search parameter
         share_code = request.query_params.get('share_code', '')
+        is_dashboard = request.query_params.get('dashboard') == 'true'
 
         # Get blocked user IDs (only if authenticated)
         if request.user.is_authenticated:
@@ -1419,18 +1422,21 @@ class MatchListView(APIView):
                 profile = request.user.profile
                 if profile.role == 'manager':
                     # In dashboard context, restrict matches to their managed clubs
-                    if request.query_params.get('dashboard') == 'true':
+                    if is_dashboard:
                         matches = matches.filter(club__manager=request.user)
             except Exception:
                 pass
 
         # Apply filters
         if status_filter:
-            matches = matches.filter(status=status_filter)
+            if status_filter == 'finished':
+                matches = matches.filter(Q(status='completed') | Q(status='finished'))
+            else:
+                matches = matches.filter(status=status_filter)
         else:
             # By default, don't show cancelled matches in public feeds.
             # Allow them on the dashboard or for the user's own matches/history.
-            if request.query_params.get('dashboard') != 'true' and request.query_params.get('my_matches') != 'true':
+            if not is_dashboard and my_matches != 'true':
                 matches = matches.exclude(status='cancelled')
 
         if match_type:
@@ -1485,10 +1491,10 @@ class MatchListView(APIView):
             )
         else:
             # For available matches (not my matches), only show public matches
-            if request.query_params.get('dashboard') != 'true':
+            if not is_dashboard:
                 matches = matches.filter(is_public=True)
             # For non-authenticated users, only show open matches
-            if not request.user.is_authenticated:
+            if not request.user.is_authenticated and not is_dashboard:
                 matches = matches.filter(status='open')
 
         # Update match statuses
@@ -1496,10 +1502,13 @@ class MatchListView(APIView):
             match.update_status()
 
         # Order by date
-        matches = matches.order_by('date_time')
+        if is_dashboard:
+            matches = matches.order_by('-date_time')
+        else:
+            matches = matches.order_by('date_time')
 
         # Paginate
-        if request.query_params.get('dashboard') == 'true':
+        if is_dashboard:
             serializer = MatchSerializer(matches, many=True, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
 
