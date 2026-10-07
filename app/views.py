@@ -2680,6 +2680,12 @@ class UserDetailManagementView(APIView):
             if 'last_name' in request.data: user.last_name = request.data['last_name']
             if 'is_active' in request.data: user.is_active = request.data['is_active']
             if 'is_staff' in request.data: user.is_staff = request.data['is_staff']
+            if 'password' in request.data and request.data['password']:
+                pwd = request.data['password'].strip() if isinstance(request.data['password'], str) else str(request.data['password'])
+                if pwd:
+                    if len(pwd) < 6:
+                        return Response({'password': ['Le mot de passe doit contenir au moins 6 caractères']}, status=status.HTTP_400_BAD_REQUEST)
+                    user.set_password(pwd)
             user.save()
 
             if 'profile' in request.data and hasattr(user, 'profile'):
