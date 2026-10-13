@@ -698,11 +698,15 @@ class ProfileView(APIView):
             'phone_number', 'full_name', 'bio', 'location',
             'skill_level', 'evaluation_type', 'external_avatar_url',
             'user_first_name', 'user_last_name', 'user_email',
-            'right_handed',
+            'right_handed', 'is_completed',
         )
         data = {key: request.data.get(key) for key in allowed_fields if key in request.data}
         if 'right-handed' in request.data:
             data['right_handed'] = request.data.get('right-handed')
+
+        # Auto-mark profile as completed when skill_level is updated
+        if 'skill_level' in request.data and request.data.get('skill_level') is not None:
+            data['is_completed'] = True
 
         # Handle avatar_url (e.g. DiceBear URL) sent as a text field
         avatar_url = request.data.get('avatar_url') or request.data.get('external_avatar_url')
@@ -1205,6 +1209,12 @@ class BookingListView(APIView):
 
     def post(self, request):
         """Create a new booking"""
+        if hasattr(request.user, 'profile') and not request.user.profile.is_completed:
+            return Response({
+                'error': 'Vous devez compléter votre profil et définir votre niveau avant de réserver un terrain',
+                'profile_incomplete': True
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = BookingSerializer(data=request.data)
         if serializer.is_valid():
             # Check for conflicts
@@ -1524,6 +1534,12 @@ class MatchListView(APIView):
         if not request.user.is_authenticated:
             return Response({'error': 'Authentification requise pour créer des matchs'}, status=status.HTTP_401_UNAUTHORIZED)
 
+        if hasattr(request.user, 'profile') and not request.user.profile.is_completed:
+            return Response({
+                'error': 'Vous devez compléter votre profil et définir votre niveau avant de créer un match',
+                'profile_incomplete': True
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = MatchSerializer(data=request.data)
         if serializer.is_valid():
             match = serializer.save(organizer=request.user)
@@ -1669,6 +1685,12 @@ class MatchJoinView(APIView):
     def post(self, request, match_id):
         """Join a match"""
         try:
+            if hasattr(request.user, 'profile') and not request.user.profile.is_completed:
+                return Response({
+                    'error': 'Vous devez compléter votre profil et définir votre niveau avant de rejoindre un match',
+                    'profile_incomplete': True
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             match = Match.objects.get(id=match_id)
 
             # Check if match is open
