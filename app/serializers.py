@@ -309,7 +309,8 @@ class MatchSerializer(serializers.ModelSerializer):
     """Match serializer"""
     participants = MatchParticipantSerializer(many=True, read_only=True)
     organizer_info = serializers.SerializerMethodField()
-    organizer_name = serializers.CharField(source='organizer.username', read_only=True)
+    organizer_name = serializers.SerializerMethodField()
+    organizer_avatar = serializers.SerializerMethodField()
     location = serializers.SerializerMethodField()
     club_name = serializers.CharField(source='club.name', read_only=True)
     court_name = serializers.CharField(source='court.name', read_only=True)
@@ -327,7 +328,7 @@ class MatchSerializer(serializers.ModelSerializer):
             'id', 'title', 'description', 'match_type', 'club', 'club_name',
             'court', 'court_name', 'booking', 'date_time', 'duration',
             'date', 'start_time', 'end_time',  # Backward compatibility
-            'organizer', 'organizer_name', 'organizer_info', 'max_players',
+            'organizer', 'organizer_name', 'organizer_avatar', 'organizer_info', 'max_players',
             'min_skill_level', 'max_skill_level', 'price_per_player', 'currency',
             'evaluation_type', 'min_skill_level_new', 'max_skill_level_new',
             'min_skill_level_old', 'max_skill_level_old',
@@ -336,17 +337,30 @@ class MatchSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'organizer', 'organizer_name', 'organizer_info', 'club_name', 'court_name',
+            'id', 'organizer', 'organizer_name', 'organizer_avatar', 'organizer_info', 'club_name', 'court_name',
             'participants_count', 'location', 'share_code', 'share_link',
             'date', 'start_time', 'end_time', 'created_at', 'updated_at'
         ]
 
+    def get_organizer_name(self, obj):
+        if hasattr(obj.organizer, 'profile') and obj.organizer.profile.full_name:
+            return obj.organizer.profile.full_name
+        return obj.organizer.get_full_name() or obj.organizer.username
+
+    def get_organizer_avatar(self, obj):
+        request = self.context.get('request')
+        return get_user_avatar_url(obj.organizer.profile, request) if hasattr(obj.organizer, 'profile') else None
+
     def get_organizer_info(self, obj):
         request = self.context.get('request')
         avatar_url = get_user_avatar_url(obj.organizer.profile, request) if hasattr(obj.organizer, 'profile') else None
+        full_name = obj.organizer.profile.full_name if hasattr(obj.organizer, 'profile') else None
+        display_name = full_name or obj.organizer.get_full_name() or obj.organizer.username
         return {
             'id': obj.organizer.id,
             'username': obj.organizer.username,
+            'full_name': full_name,
+            'name': display_name,
             'skill_level': obj.organizer.profile.skill_level if hasattr(obj.organizer, 'profile') else None,
             'evaluation_type': obj.organizer.profile.evaluation_type if hasattr(obj.organizer, 'profile') else 'new',
             'avatar': avatar_url
