@@ -2189,6 +2189,72 @@ class CourtRatingView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+class PendingRatingMatchView(APIView):
+    """Check if the authenticated user has a completed match (<48h) pending peer ratings or winner declaration"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        now = timezone.now()
+        cutoff = now - timedelta(hours=48)
+
+        # Get matches where user was organizer or confirmed participant
+        participant_match_ids = MatchParticipant.objects.filter(
+            user=user,
+            status='confirmed'
+        ).values_list('match_id', flat=True)
+
+        candidate_matches = Match.objects.filter(
+            Q(organizer=user) | Q(id__in=participant_match_ids)
+        ).filter(
+            date_time__gte=cutoff - timedelta(hours=6)
+        ).order_by('-date_time')
+
+        for match in candidate_matches:
+            match.update_status()
+
+            match_end = match.get_match_datetime_end()
+            # Match must be finished
+            if match.status != 'completed' and match_end > now:
+                continue
+
+            # Must be within 48h from end
+            if now > match_end + timedelta(hours=48):
+                continue
+
+            # Check if user has already rated peers for this match
+            if Rating.objects.filter(match=match, rater=user).exists():
+                continue
+
+            # Check if there are other confirmed players in the match to rate
+            all_confirmed = set(match.participants.filter(status='confirmed').values_list('user_id', flat=True))
+            all_confirmed.add(match.organizer_id)
+            all_confirmed.discard(user.id)
+            has_players_to_rate = len(all_confirmed) > 0
+
+            # If user has no one to rate and is not organizer, skip
+            if not has_players_to_rate and match.organizer_id != user.id:
+                continue
+
+            # Found pending match
+            serializer = MatchSerializer(match, context={'request': request})
+            hours_remaining = round(max(0.0, (match_end + timedelta(hours=48) - now).total_seconds() / 3600.0), 1)
+
+            return Response({
+                'has_pending_rating': True,
+                'match': serializer.data,
+                'is_organizer': (match.organizer_id == user.id),
+                'winner_defined': (match.winners.exists() or match.losers.exists()),
+                'has_players_to_rate': has_players_to_rate,
+                'hours_remaining': hours_remaining,
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            'has_pending_rating': False,
+            'match': None,
+        }, status=status.HTTP_200_OK)
+
+
 # ============================================================================
 # COMMUNITY APIs
 # ============================================================================

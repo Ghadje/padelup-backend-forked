@@ -395,6 +395,89 @@ def send_verification_email(user, code):
     return _send_email(user.email, subject, html_content)
 
 
+def send_match_ended_email(user, match):
+    """Send match ended notification email with rating invitation"""
+    if not user.email:
+        return False
+
+    club_name = match.club.name if match.club else "Club Padel"
+    date_str = match.date_time.strftime('%d/%m/%Y à %H:%M')
+    
+    subject = f'PadelUp - Match terminé ({club_name})'
+    html_content = f"""
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 24px;">
+        <div style="background: #094A73; color: white; padding: 24px; border-radius: 16px 16px 0 0; text-align: center;">
+            <h1 style="margin: 0; font-size: 24px;">PadelUp</h1>
+            <p style="margin: 8px 0 0; opacity: 0.9;">Votre match est terminé !</p>
+        </div>
+        <div style="background: white; padding: 24px; border-radius: 0 0 16px 16px;">
+            <p>Bonjour <strong>{user.first_name or user.username}</strong>,</p>
+            <p>Votre match de padel vient de se terminer. Nous espérons que vous avez passé un excellent moment sur le court !</p>
+            
+            <div style="background: #eff6ff; border: 1px solid #93c5fd; border-radius: 12px; padding: 16px; margin: 16px 0;">
+                <h3 style="margin: 0 0 8px; color: #094A73;">{match.title or 'Match de Padel'}</h3>
+                <p style="margin: 4px 0;"><strong>Club :</strong> {club_name}</p>
+                <p style="margin: 4px 0;"><strong>Date & Heure :</strong> {date_str}</p>
+                <p style="margin: 4px 0;"><strong>Organisateur :</strong> {match.organizer.username}</p>
+            </div>
+
+            <p style="margin: 16px 0;"><strong>⭐ Évaluez vos coéquipiers et adversaires :</strong></p>
+            <p>Ouvrez l'application PadelUp dès maintenant pour noter le fair-play et le niveau de vos partenaires.</p>
+            
+            <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
+                <em>Note : Vous disposez de 48 heures pour enregistrer les scores et évaluer les joueurs. Passé ce délai, le résultat par défaut sera appliqué.</em>
+            </p>
+            <p style="color: #6b7280; font-size: 14px; margin-top: 16px;">L'équipe PadelUp</p>
+        </div>
+    </div>
+    """
+    return _send_email(user.email, subject, html_content)
+
+
+def send_match_auto_resolved_email(user, match, is_organizer=False):
+    """Send notification email when a match is auto-resolved after 48h"""
+    if not user.email:
+        return False
+
+    club_name = match.club.name if match.club else "Club Padel"
+    date_str = match.date_time.strftime('%d/%m/%Y')
+    organizer_name = match.organizer.username
+
+    subject = f'PadelUp - Clôture automatique du match ({club_name})'
+    
+    if is_organizer:
+        body_text = f"""
+        <p>Le délai de <strong>48 heures</strong> pour la validation des résultats du match du <strong>{date_str}</strong> est maintenant écoulé.</p>
+        <p>En tant que créateur et organisateur du match, vous avez été <strong>désigné vainqueur par défaut</strong>, et vos statistiques de victoires ont été mises à jour.</p>
+        <p style="color: #6b7280; font-size: 13px;">Aucune évaluation des joueurs n'a été enregistrée pour cette session.</p>
+        """
+    else:
+        body_text = f"""
+        <p>Le délai de <strong>48 heures</strong> pour la validation des résultats du match du <strong>{date_str}</strong> est maintenant écoulé.</p>
+        <p>Aucune saisie n'ayant été validée, le créateur du match (<strong>{organizer_name}</strong>) a été <strong>désigné vainqueur par défaut</strong>, et aucune évaluation n'a été enregistrée pour ce match.</p>
+        """
+
+    html_content = f"""
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 24px;">
+        <div style="background: #094A73; color: white; padding: 24px; border-radius: 16px 16px 0 0; text-align: center;">
+            <h1 style="margin: 0; font-size: 24px;">PadelUp</h1>
+            <p style="margin: 8px 0 0; opacity: 0.9;">Résolution automatique (48h)</p>
+        </div>
+        <div style="background: white; padding: 24px; border-radius: 0 0 16px 16px;">
+            <p>Bonjour <strong>{user.first_name or user.username}</strong>,</p>
+            {body_text}
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 16px 0;">
+                <p style="margin: 4px 0;"><strong>Match :</strong> {match.title or 'Match de Padel'}</p>
+                <p style="margin: 4px 0;"><strong>Club :</strong> {club_name}</p>
+                <p style="margin: 4px 0;"><strong>Date :</strong> {date_str}</p>
+            </div>
+            <p style="color: #6b7280; font-size: 14px; margin-top: 16px;">À bientôt sur les terrains !<br>L'équipe PadelUp</p>
+        </div>
+    </div>
+    """
+    return _send_email(user.email, subject, html_content)
+
+
 def _send_email(to_email, subject, html_content):
     """Send an email using Django's configured mail backend"""
     try:

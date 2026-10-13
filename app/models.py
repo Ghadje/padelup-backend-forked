@@ -384,6 +384,10 @@ class Match(models.Model):
     winners = models.ManyToManyField(User, related_name='matches_won', blank=True)
     losers = models.ManyToManyField(User, related_name='matches_lost', blank=True)
 
+    # Completion & Auto-resolution flags
+    end_notification_sent = models.BooleanField(default=False)
+    auto_resolved_48h = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -463,6 +467,8 @@ class Match(models.Model):
                 self.is_open = False
                 self.save(update_fields=['status', 'is_open'])
             self._check_and_set_solo_creator_winner()
+            self._trigger_end_of_match_notifications()
+            self._check_and_auto_resolve_48h()
 
         # Check if match is full (before it starts)
         elif accepted_count >= self.max_players and current_datetime < match_start:
@@ -494,6 +500,117 @@ class Match(models.Model):
         # If there are no other confirmed participants (only creator/organizer was in the match)
         if not other_confirmed.exists():
             self.mark_winners([self.organizer.id], [])
+
+    def _trigger_end_of_match_notifications(self):
+        """When match is completed, send email + push notification to all confirmed participants (idempotent)"""
+        if self.status != 'completed' or self.end_notification_sent:
+            return
+
+        # Mark as sent first to prevent duplicate sends
+        self.end_notification_sent = True
+        self.save(update_fields=['end_notification_sent'])
+
+        try:
+            from .email_service import send_match_ended_email
+            from .fcm_service import create_notification
+        except ImportError:
+            return
+
+        # Gather all confirmed participants including the organizer
+        participants = self.participants.filter(status='confirmed').select_related('user')
+        users_to_notify = {self.organizer}
+        for p in participants:
+            users_to_notify.add(p.user)
+
+        for user in users_to_notify:
+            # 1. Send match ended email
+            try:
+                send_match_ended_email(user, self)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Error sending match ended email to {user.username}: {e}")
+
+            # 2. Send in-app notification + FCM push
+            try:
+                create_notification(
+                    user=user,
+                    notification_type='match_ended',
+                    message=f"Le match du {self.date_time.strftime('%d/%m')} est terminé ! Donnez votre avis et notez les participants.",
+                    match=self,
+                    target='mobile',
+                    title="PadelUp - Match terminé",
+                    data={
+                        'action': 'rate_match',
+                        'match_id': str(self.id),
+                    }
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Error creating match ended notification for {user.username}: {e}")
+
+    def _check_and_auto_resolve_48h(self):
+        """If 48 hours have passed since match ended and no winner/loser defined, creator wins by default and participants are notified"""
+        if self.status != 'completed' or self.auto_resolved_48h:
+            return
+
+        from datetime import timedelta
+        match_end = self.get_match_datetime_end()
+        if timezone.now() < match_end + timedelta(hours=48):
+            return
+
+        # If winners or losers are already recorded, nothing to auto-resolve
+        if self.winners.exists() or self.losers.exists():
+            return
+
+        # Mark as auto-resolved
+        self.auto_resolved_48h = True
+        self.save(update_fields=['auto_resolved_48h'])
+
+        # Set creator as winner
+        self.mark_winners([self.organizer.id], [])
+
+        try:
+            from .email_service import send_match_auto_resolved_email
+            from .fcm_service import create_notification
+        except ImportError:
+            return
+
+        participants = self.participants.filter(status='confirmed').select_related('user')
+        users_to_notify = {self.organizer}
+        for p in participants:
+            users_to_notify.add(p.user)
+
+        for user in users_to_notify:
+            is_org = (user.id == self.organizer.id)
+            # 1. Send email
+            try:
+                send_match_auto_resolved_email(user, self, is_organizer=is_org)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Error sending auto-resolved email to {user.username}: {e}")
+
+            # 2. Send in-app notification + FCM push
+            try:
+                if is_org:
+                    msg = f"Délai de 48h écoulé : vous avez été désigné vainqueur par défaut pour le match du {self.date_time.strftime('%d/%m')}."
+                else:
+                    msg = f"Délai de 48h écoulé : le créateur ({self.organizer.username}) est désigné vainqueur par défaut, aucun avis n'a été enregistré."
+
+                create_notification(
+                    user=user,
+                    notification_type='match_auto_resolved',
+                    message=msg,
+                    match=self,
+                    target='mobile',
+                    title="PadelUp - Match clôturé",
+                    data={
+                        'action': 'match_auto_resolved',
+                        'match_id': str(self.id),
+                    }
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Error creating auto-resolved notification for {user.username}: {e}")
 
     def get_accepted_participants_count(self):
         """Get count of accepted participants including organizer"""
@@ -699,6 +816,8 @@ class Notification(models.Model):
         ('booking_confirmed', 'Réservation confirmée'),
         ('new_booking', 'Nouvelle réservation'),
         ('booking_cancelled', 'Réservation annulée'),
+        ('match_ended', 'Match terminé'),
+        ('match_auto_resolved', 'Match résolu par défaut'),
     ]
 
     TARGET_CHOICES = [
@@ -708,7 +827,7 @@ class Notification(models.Model):
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
-    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    type = models.CharField(max_length=30, choices=TYPE_CHOICES)
     target = models.CharField(max_length=10, choices=TARGET_CHOICES, default='mobile')
     club = models.ForeignKey('Club', on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
     match = models.ForeignKey(Match, on_delete=models.CASCADE, null=True, blank=True)

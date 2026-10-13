@@ -40,6 +40,7 @@ from .views import (
     MatchInviteView,
     MatchChatView,
     MatchFinishView,
+    PendingRatingMatchView,
 
     # Ratings
     PlayerRatingView,
@@ -120,6 +121,7 @@ urlpatterns = [
     # MATCH ENDPOINTS
     # ============================================================================
     path('matches/', MatchListView.as_view(), name='match_list'),
+    path('matches/pending-rating/', PendingRatingMatchView.as_view(), name='match_pending_rating'),
     path('matches/<int:match_id>/', MatchDetailView.as_view(), name='match_detail'),
     path('matches/<int:match_id>/join/', MatchJoinView.as_view(), name='match_join'),
     path('matches/<int:match_id>/participants/<int:participant_id>/', MatchParticipantManageView.as_view(), name='match_participant_manage'),
