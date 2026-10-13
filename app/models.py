@@ -447,34 +447,53 @@ class Match(models.Model):
 
     def update_status(self):
         """Update match status based on current conditions"""
-        # Don't update if manually cancelled or completed
-        if self.status in ['cancelled', 'completed']:
+        # Don't update if manually cancelled
+        if self.status == 'cancelled':
             return
 
         current_datetime = timezone.now()
         match_start = self.get_match_datetime_start()
+        match_end = self.get_match_datetime_end()
         accepted_count = self.get_accepted_participants_count()
 
-        # Check if match has passed start date & time (passes today's date & time)
-        if match_start < current_datetime:
+        # Check if match has ended (either already completed, or match time has passed)
+        if self.status == 'completed' or match_end < current_datetime or match_start < current_datetime:
             if self.status != 'completed':
                 self.status = 'completed'
                 self.is_open = False
-                self.save()
+                self.save(update_fields=['status', 'is_open'])
+            self._check_and_set_solo_creator_winner()
 
         # Check if match is full (before it starts)
         elif accepted_count >= self.max_players and current_datetime < match_start:
             if self.status == 'open':
                 self.status = 'full'
                 self.is_open = False
-                self.save()
+                self.save(update_fields=['status', 'is_open'])
 
         # Otherwise it should be open (if not started yet and not full)
         elif current_datetime < match_start and accepted_count < self.max_players:
-            if self.status not in ['open', 'full'] and self.status != 'cancelled':
+            if self.status not in ['open', 'full']:
                 self.status = 'open'
                 self.is_open = True
-                self.save()
+                self.save(update_fields=['status', 'is_open'])
+
+    def _check_and_set_solo_creator_winner(self):
+        """If match has ended, no winners/losers have been set, and organizer is the only player, mark organizer as winner by default"""
+        if self.status != 'completed':
+            return
+
+        # Check if winners or losers are already recorded
+        if self.winners.exists() or self.losers.exists():
+            return
+
+        # Check confirmed participants other than the organizer
+        confirmed_participants = self.participants.filter(status='confirmed')
+        other_confirmed = confirmed_participants.exclude(user=self.organizer)
+
+        # If there are no other confirmed participants (only creator/organizer was in the match)
+        if not other_confirmed.exists():
+            self.mark_winners([self.organizer.id], [])
 
     def get_accepted_participants_count(self):
         """Get count of accepted participants including organizer"""
@@ -505,20 +524,26 @@ class Match(models.Model):
 
         # Decrement stats for users who were previously counted
         for user_id in old_winners:
-            user = User.objects.get(id=user_id)
-            if hasattr(user, 'stats'):
-                user.stats.matches_played = max(0, user.stats.matches_played - 1)
-                user.stats.matches_won = max(0, user.stats.matches_won - 1)
-                user.stats.total_hours = max(0, user.stats.total_hours - match_hours)
-                user.stats.save()
+            try:
+                user = User.objects.get(id=user_id)
+                stats, _ = PlayerStats.objects.get_or_create(user=user)
+                stats.matches_played = max(0, stats.matches_played - 1)
+                stats.matches_won = max(0, stats.matches_won - 1)
+                stats.total_hours = max(0.0, stats.total_hours - match_hours)
+                stats.save()
+            except User.DoesNotExist:
+                pass
 
         for user_id in old_losers:
-            user = User.objects.get(id=user_id)
-            if hasattr(user, 'stats'):
-                user.stats.matches_played = max(0, user.stats.matches_played - 1)
-                user.stats.matches_lost = max(0, user.stats.matches_lost - 1)
-                user.stats.total_hours = max(0, user.stats.total_hours - match_hours)
-                user.stats.save()
+            try:
+                user = User.objects.get(id=user_id)
+                stats, _ = PlayerStats.objects.get_or_create(user=user)
+                stats.matches_played = max(0, stats.matches_played - 1)
+                stats.matches_lost = max(0, stats.matches_lost - 1)
+                stats.total_hours = max(0.0, stats.total_hours - match_hours)
+                stats.save()
+            except User.DoesNotExist:
+                pass
 
         # Clear existing winners/losers
         self.winners.clear()
@@ -526,25 +551,31 @@ class Match(models.Model):
 
         # Add winners
         for user_id in winner_ids:
-            user = User.objects.get(id=user_id)
-            self.winners.add(user)
-            # Update winner stats
-            if hasattr(user, 'stats'):
-                user.stats.matches_played += 1
-                user.stats.matches_won += 1
-                user.stats.total_hours += match_hours
-                user.stats.save()
+            try:
+                user = User.objects.get(id=user_id)
+                self.winners.add(user)
+                # Update winner stats
+                stats, _ = PlayerStats.objects.get_or_create(user=user)
+                stats.matches_played += 1
+                stats.matches_won += 1
+                stats.total_hours += match_hours
+                stats.save()
+            except User.DoesNotExist:
+                pass
 
         # Add losers
         for user_id in loser_ids:
-            user = User.objects.get(id=user_id)
-            self.losers.add(user)
-            # Update loser stats
-            if hasattr(user, 'stats'):
-                user.stats.matches_played += 1
-                user.stats.matches_lost += 1
-                user.stats.total_hours += match_hours
-                user.stats.save()
+            try:
+                user = User.objects.get(id=user_id)
+                self.losers.add(user)
+                # Update loser stats
+                stats, _ = PlayerStats.objects.get_or_create(user=user)
+                stats.matches_played += 1
+                stats.matches_lost += 1
+                stats.total_hours += match_hours
+                stats.save()
+            except User.DoesNotExist:
+                pass
 
         return True
 
