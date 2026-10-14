@@ -251,12 +251,12 @@ class BookingSerializer(serializers.ModelSerializer):
 class MatchParticipantSerializer(serializers.ModelSerializer):
     """Match participant serializer"""
     user_info = serializers.SerializerMethodField()
-    user_name = serializers.CharField(source='user.username', read_only=True)
+    user_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     # Flutter-compatible fields at top level
     userId = serializers.IntegerField(source='user.id', read_only=True)
-    userName = serializers.CharField(source='user.username', read_only=True)
+    userName = serializers.SerializerMethodField()
     userAvatar = serializers.SerializerMethodField()
     userSkillLevel = serializers.SerializerMethodField()
     userEvaluationType = serializers.SerializerMethodField()
@@ -270,13 +270,32 @@ class MatchParticipantSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'user_name', 'user_info', 'status_display', 'joined_at', 'userId', 'userName', 'userAvatar', 'userSkillLevel', 'userEvaluationType']
 
+    def get_user_name(self, obj):
+        if obj.user:
+            if hasattr(obj.user, 'profile') and obj.user.profile.full_name and obj.user.profile.full_name.strip():
+                return obj.user.profile.full_name.strip()
+            full_name = obj.user.get_full_name()
+            if full_name and full_name.strip():
+                return full_name.strip()
+            return obj.user.username
+        return ''
+
+    def get_userName(self, obj):
+        return self.get_user_name(obj)
+
     def get_user_info(self, obj):
         if obj.user:
             request = self.context.get('request')
             avatar_url = get_user_avatar_url(obj.user.profile, request) if hasattr(obj.user, 'profile') else None
+            full_name = obj.user.profile.full_name.strip() if hasattr(obj.user, 'profile') and obj.user.profile.full_name else ''
+            if not full_name:
+                full_name = obj.user.get_full_name().strip()
+            display_name = full_name if full_name else obj.user.username
             return {
                 'id': obj.user.id,
                 'username': obj.user.username,
+                'name': display_name,
+                'full_name': display_name,
                 'first_name': obj.user.first_name,
                 'last_name': obj.user.last_name,
                 'skill_level': obj.user.profile.skill_level if hasattr(obj.user, 'profile') else None,
@@ -343,9 +362,12 @@ class MatchSerializer(serializers.ModelSerializer):
         ]
 
     def get_organizer_name(self, obj):
-        if hasattr(obj.organizer, 'profile') and obj.organizer.profile.full_name:
-            return obj.organizer.profile.full_name
-        return obj.organizer.get_full_name() or obj.organizer.username
+        if hasattr(obj.organizer, 'profile') and obj.organizer.profile.full_name and obj.organizer.profile.full_name.strip():
+            return obj.organizer.profile.full_name.strip()
+        full_name = obj.organizer.get_full_name()
+        if full_name and full_name.strip():
+            return full_name.strip()
+        return obj.organizer.username
 
     def get_organizer_avatar(self, obj):
         request = self.context.get('request')
