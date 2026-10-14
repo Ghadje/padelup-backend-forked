@@ -716,9 +716,13 @@ class FriendshipSerializer(serializers.ModelSerializer):
         if request and request.user:
             friend = obj.user2 if obj.user1 == request.user else obj.user1
             avatar_url = get_user_avatar_url(friend.profile, request) if hasattr(friend, 'profile') else None
+            full_name = f"{friend.first_name} {friend.last_name}".strip()
             return {
                 'id': friend.id,
                 'username': friend.username,
+                'first_name': friend.first_name,
+                'last_name': friend.last_name,
+                'full_name': full_name if full_name else friend.username,
                 'email': friend.email,
                 'skill_level': friend.profile.skill_level if hasattr(friend, 'profile') else None,
                 'evaluation_type': friend.profile.evaluation_type if hasattr(friend, 'profile') else 'new',

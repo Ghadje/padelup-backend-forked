@@ -55,6 +55,7 @@ from .views import (
     FriendRequestView,
     FriendRequestManageView,
     FriendsListView,
+    FriendSuggestionsView,
 
     # Notifications
     NotificationView,
@@ -146,6 +147,7 @@ urlpatterns = [
     # FRIEND SYSTEM ENDPOINTS
     # ============================================================================
     path('friends/', FriendsListView.as_view(), name='friends_list'),
+    path('friends/suggestions/', FriendSuggestionsView.as_view(), name='friend_suggestions'),
     path('friends/<int:friend_id>/', FriendsListView.as_view(), name='friend_remove'),
     path('friend-requests/', FriendRequestView.as_view(), name='friend_requests'),
     path('friend-requests/<int:request_id>/', FriendRequestManageView.as_view(), name='friend_request_manage'),

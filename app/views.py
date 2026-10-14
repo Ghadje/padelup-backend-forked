@@ -8,7 +8,9 @@ from django.contrib.auth import authenticate, login, logout
 logger = logging.getLogger(__name__)
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404
-from django.db.models import Q, Avg, Count
+from django.db import models
+from django.db.models import Q, Avg, Count, Case, When, IntegerField, Value
+from django.db.models.functions import Concat
 from django.utils import timezone
 from datetime import datetime, timedelta
 
@@ -1902,16 +1904,6 @@ class MatchInviteView(APIView):
                 try:
                     friend = User.objects.get(id=friend_id)
 
-                    # Check if they are friends
-                    if not Friendship.are_friends(request.user, friend):
-                        results.append({
-                            'user_id': friend_id,
-                            'username': friend.username,
-                            'success': False,
-                            'error': 'Vous n\'êtes pas ami avec cet utilisateur'
-                        })
-                        continue
-
                     # Check if already a participant
                     is_participant = MatchParticipant.objects.filter(
                         match=match,
@@ -2536,10 +2528,28 @@ class FriendsListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Get user's friends"""
+        """Get user's friends with optional fuzzy search"""
         friendships = Friendship.objects.filter(
             Q(user1=request.user) | Q(user2=request.user)
         )
+
+        search = request.query_params.get('q', '').strip()
+        if search:
+            s_lower = search.lower()
+            matching_ids = []
+            import difflib
+            for f in friendships:
+                friend = f.user2 if f.user1 == request.user else f.user1
+                full_name = f"{friend.first_name} {friend.last_name}".strip().lower()
+                username = friend.username.lower()
+                email = (friend.email or '').lower()
+
+                if (s_lower in username or s_lower in full_name or s_lower in email or
+                    difflib.SequenceMatcher(None, s_lower, username).ratio() > 0.65 or
+                    difflib.SequenceMatcher(None, s_lower, full_name).ratio() > 0.65):
+                    matching_ids.append(f.id)
+
+            friendships = friendships.filter(id__in=matching_ids)
 
         serializer = FriendshipSerializer(friendships, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -2562,6 +2572,125 @@ class FriendsListView(APIView):
 
         except User.DoesNotExist:
             return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class FriendSuggestionsView(APIView):
+    """Suggestions of players to add as friends with pagination and typo-tolerant search"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 10))
+        except (ValueError, TypeError):
+            page = 1
+            page_size = 10
+
+        search = request.query_params.get('q', '').strip()
+
+        # 1. Existing friends IDs
+        friend_ids = set()
+        for f in Friendship.objects.filter(Q(user1=request.user) | Q(user2=request.user)):
+            friend_ids.add(f.user2_id if f.user1_id == request.user.id else f.user1_id)
+
+        # 2. Friend requests (pending, accepted, rejected)
+        all_reqs = FriendRequest.objects.filter(
+            Q(sender=request.user) | Q(receiver=request.user)
+        )
+        req_user_ids = set()
+        sent_pending_ids = set()
+        for fr in all_reqs:
+            other_id = fr.receiver_id if fr.sender_id == request.user.id else fr.sender_id
+            if fr.status == 'pending':
+                req_user_ids.add(other_id)
+                if fr.sender_id == request.user.id:
+                    sent_pending_ids.add(other_id)
+            elif fr.status in ('rejected', 'accepted'):
+                req_user_ids.add(other_id)
+
+        # 3. Blocked users
+        blocked_user_ids = set(BlockedUser.get_blocked_user_ids(request.user))
+
+        # Excluded from suggestions
+        excluded_ids = friend_ids | req_user_ids | blocked_user_ids | {request.user.id}
+
+        users_qs = User.objects.filter(is_active=True).exclude(id__in=excluded_ids)
+
+        if search:
+            search_str = search.strip()
+            exact_matches = users_qs.filter(
+                Q(username__icontains=search_str) |
+                Q(first_name__icontains=search_str) |
+                Q(last_name__icontains=search_str) |
+                Q(email__icontains=search_str)
+            )
+            if exact_matches.exists():
+                users_qs = exact_matches
+            else:
+                import difflib
+                candidates = list(users_qs[:100])
+                s_lower = search_str.lower()
+                matched_ids = []
+                for u in candidates:
+                    u_full = f"{u.first_name} {u.last_name}".strip().lower()
+                    u_user = u.username.lower()
+                    u_email = (u.email or '').lower()
+                    if (s_lower in u_user or s_lower in u_full or s_lower in u_email or
+                        difflib.SequenceMatcher(None, s_lower, u_user).ratio() > 0.65 or
+                        difflib.SequenceMatcher(None, s_lower, u_full).ratio() > 0.65):
+                        matched_ids.append(u.id)
+                users_qs = users_qs.filter(id__in=matched_ids)
+
+        # Order by location proximity to user profile if available, then date_joined
+        user_location = getattr(getattr(request.user, 'profile', None), 'location', None)
+        if user_location:
+            users_qs = users_qs.order_by(
+                Case(
+                    When(profile__location__iexact=user_location, then=0),
+                    default=1,
+                    output_field=IntegerField(),
+                ),
+                '-date_joined'
+            )
+        else:
+            users_qs = users_qs.order_by('-date_joined')
+
+        total = users_qs.count()
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_users = users_qs[start:end]
+        has_more = end < total
+
+        results = []
+        for u in page_users:
+            full_name = f"{u.first_name} {u.last_name}".strip()
+            avatar_url = None
+            if hasattr(u, 'profile') and u.profile.avatar:
+                try:
+                    avatar_url = request.build_absolute_uri(u.profile.avatar.url)
+                except Exception:
+                    avatar_url = u.profile.avatar.url
+
+            results.append({
+                'id': u.id,
+                'username': u.username,
+                'full_name': full_name if full_name else u.username,
+                'email': u.email,
+                'avatar': avatar_url,
+                'skill_level': u.profile.skill_level if hasattr(u, 'profile') else None,
+                'evaluation_type': u.profile.evaluation_type if hasattr(u, 'profile') else 'new',
+                'city': u.profile.location if hasattr(u, 'profile') else '',
+                'has_pending_request': u.id in sent_pending_ids,
+                'is_friend': False,
+            })
+
+        return Response({
+            'suggestions': results,
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'has_more': has_more,
+        }, status=status.HTTP_200_OK)
 
 
 # ============================================================================
@@ -2892,7 +3021,7 @@ class UserSearchView(APIView):
 
     def get(self, request):
         """Search for users"""
-        query = request.query_params.get('q', '')
+        query = request.query_params.get('q', '').strip()
 
         if len(query) < 2:
             return Response({'error': 'Requête de recherche trop courte'}, status=status.HTTP_400_BAD_REQUEST)
@@ -2900,10 +3029,29 @@ class UserSearchView(APIView):
         # Get blocked user IDs
         blocked_user_ids = BlockedUser.get_blocked_user_ids(request.user)
 
-        users = User.objects.filter(
+        search_q = (
             Q(username__icontains=query) |
             Q(first_name__icontains=query) |
-            Q(last_name__icontains=query)
+            Q(last_name__icontains=query) |
+            Q(email__icontains=query) |
+            Q(full_name_db__icontains=query) |
+            Q(reverse_full_name_db__icontains=query)
+        )
+
+        words = query.split()
+        if len(words) >= 2:
+            w1 = words[0]
+            w2 = " ".join(words[1:])
+            search_q |= (
+                (Q(first_name__icontains=w1) & Q(last_name__icontains=w2)) |
+                (Q(first_name__icontains=w2) & Q(last_name__icontains=w1))
+            )
+
+        users = User.objects.annotate(
+            full_name_db=Concat('first_name', Value(' '), 'last_name'),
+            reverse_full_name_db=Concat('last_name', Value(' '), 'first_name'),
+        ).filter(
+            search_q
         ).exclude(
             Q(id=request.user.id) |
             Q(id__in=blocked_user_ids)
@@ -2911,11 +3059,20 @@ class UserSearchView(APIView):
 
         results = []
         for user in users:
+            full_name = f"{user.first_name} {user.last_name}".strip()
+            avatar_url = None
+            if hasattr(user, 'profile') and user.profile.avatar:
+                try:
+                    avatar_url = request.build_absolute_uri(user.profile.avatar.url)
+                except Exception:
+                    avatar_url = user.profile.avatar.url
+
             results.append({
                 'id': user.id,
                 'username': user.username,
-                'full_name': f"{user.first_name} {user.last_name}".strip(),
-                'avatar': user.profile.avatar.url if hasattr(user, 'profile') and user.profile.avatar else None,
+                'full_name': full_name if full_name else user.username,
+                'email': user.email,
+                'avatar': avatar_url,
                 'skill_level': user.profile.skill_level if hasattr(user, 'profile') else None,
                 'evaluation_type': user.profile.evaluation_type if hasattr(user, 'profile') else 'new',
                 'is_friend': Friendship.are_friends(request.user, user),
