@@ -852,11 +852,38 @@ class ClubListView(APIView):
 
         # Apply filters
         if search:
-            clubs = clubs.filter(
-                Q(name__icontains=search) |
-                Q(address__icontains=search) |
-                Q(city__icontains=search)
+            search_str = search.strip()
+            exact_matches = clubs.filter(
+                Q(name__icontains=search_str) |
+                Q(address__icontains=search_str) |
+                Q(city__icontains=search_str)
             )
+            if exact_matches.exists():
+                clubs = exact_matches
+            else:
+                import difflib
+                search_lower = search_str.lower()
+                matched_ids = []
+                for c in clubs:
+                    full_text = f"{c.name} {c.city or ''} {c.address or ''}".lower()
+                    words = full_text.split()
+                    matched = False
+                    for w in words:
+                        if search_lower in w or w in search_lower:
+                            matched = True
+                            break
+                        if len(search_lower) >= 3 and len(w) >= 3:
+                            ratio = difflib.SequenceMatcher(None, search_lower, w).ratio()
+                            if ratio >= 0.65:
+                                matched = True
+                                break
+                    if not matched:
+                        ratio = difflib.SequenceMatcher(None, search_lower, c.name.lower()).ratio()
+                        if ratio >= 0.6:
+                            matched = True
+                    if matched:
+                        matched_ids.append(c.id)
+                clubs = clubs.filter(id__in=matched_ids)
 
         if city:
             clubs = clubs.filter(city__icontains=city)
