@@ -2066,6 +2066,8 @@ class MatchFinishView(APIView):
                 if not match.participants.filter(user_id=loser_id, status='confirmed').exists() and match.organizer.id != loser_id:
                     return Response({'error': f'L\'utilisateur {loser_id} n\'est pas un participant'}, status=status.HTTP_400_BAD_REQUEST)
 
+            was_already_completed = (match.status == 'completed' and match.winners.exists())
+
             # Mark match as completed
             match.status = 'completed'
             match.is_open = False
@@ -2075,20 +2077,58 @@ class MatchFinishView(APIView):
             success = match.mark_winners(winner_ids, loser_ids)
 
             if success:
-                # Notify all participants that match is finished
-                for participant in match.participants.filter(status='confirmed'):
-                    create_notification(
-                        user=participant.user,
-                        notification_type='match_reminder',
-                        match=match,
-                        message=f'Le match "{match.title}" est terminé. N\'oubliez pas d\'évaluer les autres joueurs !',
-                        target='mobile',
-                        title="Match terminé"
-                    )
+                # Collect other confirmed participants (excluding organizer / current user)
+                # If only one player (organizer/creator) is in the match, do not send notification
+                other_participants = match.participants.filter(status='confirmed').exclude(user=request.user)
 
+                if other_participants.exists():
+                    # Format winner display names
+                    winners = User.objects.filter(id__in=winner_ids)
+                    def get_user_display_name(u):
+                        if hasattr(u, 'profile') and u.profile.full_name and u.profile.full_name.strip():
+                            return u.profile.full_name.strip()
+                        fn = f"{u.first_name} {u.last_name}".strip()
+                        return fn if fn else u.username
+
+                    winner_names = [get_user_display_name(w) for w in winners]
+                    if len(winner_names) == 1:
+                        winners_text = winner_names[0]
+                    elif len(winner_names) == 2:
+                        winners_text = f"{winner_names[0]} et {winner_names[1]}"
+                    elif len(winner_names) > 2:
+                        winners_text = ", ".join(winner_names[:-1]) + f" et {winner_names[-1]}"
+                    else:
+                        winners_text = ""
+
+                    if was_already_completed:
+                        title = "Résultats mis à jour"
+                        if winners_text:
+                            message = f'Les vainqueurs du match "{match.title}" sont : {winners_text}. N\'oubliez pas de noter les autres joueurs !'
+                        else:
+                            message = f'Les résultats du match "{match.title}" ont été mis à jour. N\'oubliez pas de noter les autres joueurs !'
+                    else:
+                        title = "Match terminé"
+                        if winners_text:
+                            message = f'Le match "{match.title}" est terminé ! Les vainqueurs sont : {winners_text}. N\'oubliez pas de noter les autres joueurs !'
+                        else:
+                            message = f'Le match "{match.title}" est terminé. N\'oubliez pas de noter les autres joueurs !'
+
+                    for participant in other_participants:
+                        create_notification(
+                            user=participant.user,
+                            notification_type='match_ended',
+                            match=match,
+                            message=message,
+                            target='mobile',
+                            title=title,
+                            data={
+                                'action': 'rate_match',
+                                'match_id': str(match.id),
+                            }
+                        )
 
                 return Response({
-                    'message': 'Match marqué comme terminé avec succès',
+                    'message': 'Résultats du match mis à jour avec succès' if was_already_completed else 'Match marqué comme terminé avec succès',
                     'match_id': match.id,
                     'status': match.status
                 }, status=status.HTTP_200_OK)
@@ -2458,12 +2498,15 @@ class FriendRequestView(APIView):
                 message=message
             )
 
+            sender_full_name = f"{request.user.first_name} {request.user.last_name}".strip()
+            sender_name = sender_full_name or request.user.username
+
             # Send notification & push
             create_notification(
                 user=receiver,
                 notification_type='friend_request',
                 friend_request=friend_request,
-                message=f'{request.user.username} vous a envoyé une demande d\'ami',
+                message=f"{sender_name} vous a envoyé une demande d'ami",
                 target='mobile',
                 title="Demande d'ami"
             )
@@ -2498,12 +2541,15 @@ class FriendRequestManageView(APIView):
                 friend_request.status = 'accepted'
                 friend_request.save()
 
+                responder_full_name = f"{request.user.first_name} {request.user.last_name}".strip()
+                responder_name = responder_full_name or request.user.username
+
                 # Notify sender in-app & push
                 create_notification(
                     user=friend_request.sender,
                     notification_type='friend_accepted',
                     friend_request=friend_request,
-                    message=f'{request.user.username} a accepté votre demande d\'ami',
+                    message=f"{responder_name} a accepté votre demande d'ami",
                     target='mobile',
                     title="Demande d'ami acceptée"
                 )

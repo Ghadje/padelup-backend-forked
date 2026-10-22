@@ -510,12 +510,20 @@ class NotificationSerializer(serializers.ModelSerializer):
 
     def get_friend_request_info(self, obj):
         if obj.friend_request:
+            sender = obj.friend_request.sender
+            receiver = obj.friend_request.receiver
+            sender_full_name = f"{sender.first_name} {sender.last_name}".strip()
+            receiver_full_name = f"{receiver.first_name} {receiver.last_name}".strip()
             return {
                 'id': obj.friend_request.id,
-                'sender_id': obj.friend_request.sender.id,
-                'sender_username': obj.friend_request.sender.username,
-                'receiver_id': obj.friend_request.receiver.id,
-                'receiver_username': obj.friend_request.receiver.username,
+                'sender_id': sender.id,
+                'sender_username': sender.username,
+                'sender_name': sender_full_name or sender.username,
+                'sender_full_name': sender_full_name,
+                'receiver_id': receiver.id,
+                'receiver_username': receiver.username,
+                'receiver_name': receiver_full_name or receiver.username,
+                'receiver_full_name': receiver_full_name,
                 'status': obj.friend_request.status
             }
         return None
@@ -645,8 +653,8 @@ class FriendRequestSerializer(serializers.ModelSerializer):
     """Friend request serializer"""
     sender_info = serializers.SerializerMethodField()
     receiver_info = serializers.SerializerMethodField()
-    sender_name = serializers.CharField(source='sender.username', read_only=True)
-    receiver_name = serializers.CharField(source='receiver.username', read_only=True)
+    sender_name = serializers.SerializerMethodField()
+    receiver_name = serializers.SerializerMethodField()
     sender_profile = serializers.SerializerMethodField()
     receiver_profile = serializers.SerializerMethodField()
 
@@ -659,21 +667,37 @@ class FriendRequestSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'sender_name', 'sender_info', 'sender_profile', 'receiver_name', 'receiver_info', 'receiver_profile', 'created_at', 'updated_at']
 
+    def get_sender_name(self, obj):
+        full_name = f"{obj.sender.first_name} {obj.sender.last_name}".strip()
+        return full_name if full_name else obj.sender.username
+
+    def get_receiver_name(self, obj):
+        full_name = f"{obj.receiver.first_name} {obj.receiver.last_name}".strip()
+        return full_name if full_name else obj.receiver.username
+
     def get_sender_info(self, obj):
         request = self.context.get('request')
         avatar_url = get_user_avatar_url(obj.sender.profile, request) if hasattr(obj.sender, 'profile') else None
+        full_name = f"{obj.sender.first_name} {obj.sender.last_name}".strip()
         return {
             'id': obj.sender.id,
             'username': obj.sender.username,
+            'first_name': obj.sender.first_name,
+            'last_name': obj.sender.last_name,
+            'full_name': full_name if full_name else obj.sender.username,
             'avatar': avatar_url
         }
 
     def get_receiver_info(self, obj):
         request = self.context.get('request')
         avatar_url = get_user_avatar_url(obj.receiver.profile, request) if hasattr(obj.receiver, 'profile') else None
+        full_name = f"{obj.receiver.first_name} {obj.receiver.last_name}".strip()
         return {
             'id': obj.receiver.id,
             'username': obj.receiver.username,
+            'first_name': obj.receiver.first_name,
+            'last_name': obj.receiver.last_name,
+            'full_name': full_name if full_name else obj.receiver.username,
             'avatar': avatar_url
         }
 
