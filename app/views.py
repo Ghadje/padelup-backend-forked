@@ -101,7 +101,7 @@ import random
 
 from .models import (
     Profile, PlayerStats, Club, Court, Booking, Match, MatchParticipant,
-    MatchMessage, Rating, CourtRating, Notification, DeviceToken, CommunityPost,
+    MatchMessage, MatchComment, Rating, CourtRating, Notification, DeviceToken, CommunityPost,
     PostReply, CommunityGroup, FriendRequest, Friendship, PrivateMessage,
     BlockedUser, PasswordResetCode, EmailVerificationCode
 )
@@ -117,7 +117,7 @@ from .serializers import (
     UserSerializer, ProfileSerializer, ProfileSetupSerializer, ProfileUpdateSerializer,
     PlayerStatsSerializer, ClubSerializer, CourtSerializer, BookingSerializer,
     MatchSerializer, MatchDetailSerializer, MatchParticipantSerializer,
-    MatchMessageSerializer, RatingSerializer, CourtRatingSerializer,
+    MatchMessageSerializer, MatchCommentSerializer, RatingSerializer, CourtRatingSerializer,
     NotificationSerializer, CommunityPostSerializer, PostReplySerializer,
     CommunityGroupSerializer, FriendRequestSerializer, FriendshipSerializer,
     PrivateMessageSerializer, BlockedUserSerializer, RegisterSerializer,
@@ -2027,6 +2027,132 @@ class MatchChatView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Match.DoesNotExist:
             return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class MatchCommentView(APIView):
+    """Match comments & Q&A (available exclusively on public matches)"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, match_id):
+        """Get top-level comments and nested replies for a public match"""
+        try:
+            match = Match.objects.get(id=match_id)
+        except Match.DoesNotExist:
+            return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
+
+        # STRICT RULE: Comments only allowed on public matches
+        if not match.is_public:
+            return Response(
+                {'error': 'Les commentaires ne sont pas activés pour les matchs privés.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        comments = match.comments.filter(parent_comment__isnull=True).select_related(
+            'author__profile'
+        ).prefetch_related(
+            'replies__author__profile'
+        ).order_by('created_at')
+
+        serializer = MatchCommentSerializer(comments, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request, match_id):
+        """Post a comment or reply to an existing comment on a public match"""
+        try:
+            match = Match.objects.get(id=match_id)
+        except Match.DoesNotExist:
+            return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
+
+        # STRICT RULE: Comments only allowed on public matches
+        if not match.is_public:
+            return Response(
+                {'error': 'Impossible de commenter sur un match privé.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        content = request.data.get('content', '').strip()
+        if not content:
+            return Response({'error': 'Le commentaire ne peut pas être vide.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(content) > 1000:
+            return Response({'error': 'Le commentaire ne doit pas dépasser 1000 caractères.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        parent_comment_id = request.data.get('parent_comment_id')
+        parent_comment = None
+        if parent_comment_id:
+            try:
+                parent_comment = MatchComment.objects.get(id=parent_comment_id, match=match)
+            except MatchComment.DoesNotExist:
+                return Response({'error': 'Commentaire parent non trouvé.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        comment = MatchComment.objects.create(
+            match=match,
+            author=request.user,
+            content=content,
+            parent_comment=parent_comment
+        )
+
+        # Dispatch notifications to organizer and confirmed participants
+        confirmed_participants = match.participants.filter(status='confirmed').select_related('user')
+        recipients_set = {match.organizer} | {p.user for p in confirmed_participants if p.user}
+
+        # If replying, also notify the original question author
+        if parent_comment and parent_comment.author:
+            recipients_set.add(parent_comment.author)
+
+        # Exclude commenter
+        recipients = [u for u in recipients_set if u and u != request.user]
+
+        author_display_name = request.user.username
+        if hasattr(request.user, 'profile') and request.user.profile.full_name and request.user.profile.full_name.strip():
+            author_display_name = request.user.profile.full_name.strip()
+        elif request.user.get_full_name() and request.user.get_full_name().strip():
+            author_display_name = request.user.get_full_name().strip()
+
+        for recipient in recipients:
+            is_reply = parent_comment is not None
+            title = f"Réponse sur le match {match.title}" if is_reply else f"Question sur votre match {match.title}"
+            body_preview = content[:60] + ('...' if len(content) > 60 else '')
+            message_text = f"{author_display_name} : {body_preview}"
+
+            try:
+                create_notification(
+                    user=recipient,
+                    notification_type='match_comment',
+                    title=title,
+                    message=message_text,
+                    match=match,
+                    target='mobile',
+                    data={
+                        'match_id': str(match.id),
+                        'comment_id': str(comment.id),
+                        'type': 'match_comment',
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Error sending match comment notification to {recipient.username}: {e}")
+
+        serializer = MatchCommentSerializer(comment, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class MatchCommentDetailView(APIView):
+    """Delete match comment"""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, match_id, comment_id):
+        try:
+            comment = MatchComment.objects.get(id=comment_id, match_id=match_id)
+        except MatchComment.DoesNotExist:
+            return Response({'error': 'Commentaire non trouvé.'}, status=status.HTTP_404_NOT_FOUND)
+
+        is_author = comment.author == request.user
+        is_organizer = comment.match.organizer == request.user
+        if not (is_author or is_organizer or request.user.is_staff):
+            return Response({'error': 'Non autorisé à supprimer ce commentaire.'}, status=status.HTTP_403_FORBIDDEN)
+
+        comment.delete()
+        return Response({'message': 'Commentaire supprimé avec succès.'}, status=status.HTTP_200_OK)
 
 
 class MatchFinishView(APIView):

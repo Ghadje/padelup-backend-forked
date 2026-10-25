@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from .models import (
-    Profile, Club, Court, Booking, Match, MatchParticipant, MatchMessage,
+    Profile, Club, Court, Booking, Match, MatchParticipant, MatchMessage, MatchComment,
     Rating, CourtRating, Notification, DeviceToken, PlayerStats, CommunityPost, PostReply,
     CommunityGroup, FriendRequest, Friendship, PrivateMessage, BlockedUser, SavedClub,
     EmailVerificationCode
@@ -77,6 +77,14 @@ class MatchMessageAdmin(admin.ModelAdmin):
     list_display = ['match', 'sender', 'content', 'created_at']
     list_filter = ['created_at']
     search_fields = ['sender__username', 'content']
+    date_hierarchy = 'created_at'
+
+
+@admin.register(MatchComment)
+class MatchCommentAdmin(admin.ModelAdmin):
+    list_display = ['match', 'author', 'content', 'parent_comment', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['author__username', 'content', 'match__title']
     date_hierarchy = 'created_at'
 
 

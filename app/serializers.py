@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from .models import (
     Profile, PlayerStats, Club, Court, Booking, Match, MatchParticipant,
-    MatchMessage, Rating, CourtRating, Notification, DeviceToken, CommunityPost,
+    MatchMessage, MatchComment, Rating, CourtRating, Notification, DeviceToken, CommunityPost,
     PostReply, CommunityGroup, FriendRequest, Friendship, PrivateMessage,
     BlockedUser, SavedClub
 )
@@ -334,6 +334,7 @@ class MatchSerializer(serializers.ModelSerializer):
     club_name = serializers.CharField(source='club.name', read_only=True)
     court_name = serializers.CharField(source='court.name', read_only=True)
     participants_count = serializers.SerializerMethodField()
+    comments_count = serializers.SerializerMethodField()
     share_link = serializers.SerializerMethodField()
 
     # Backward compatibility fields for booking-based matches
@@ -352,12 +353,12 @@ class MatchSerializer(serializers.ModelSerializer):
             'evaluation_type', 'min_skill_level_new', 'max_skill_level_new',
             'min_skill_level_old', 'max_skill_level_old',
             'status', 'is_public', 'is_open', 'share_code', 'share_link',
-            'participants', 'participants_count', 'location', 'winners', 'losers',
+            'participants', 'participants_count', 'comments_count', 'location', 'winners', 'losers',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'organizer', 'organizer_name', 'organizer_avatar', 'organizer_info', 'club_name', 'court_name',
-            'participants_count', 'location', 'share_code', 'share_link',
+            'participants_count', 'comments_count', 'location', 'share_code', 'share_link',
             'date', 'start_time', 'end_time', 'created_at', 'updated_at'
         ]
 
@@ -393,6 +394,11 @@ class MatchSerializer(serializers.ModelSerializer):
 
     def get_participants_count(self, obj):
         return obj.get_accepted_participants_count()
+
+    def get_comments_count(self, obj):
+        if not obj.is_public:
+            return 0
+        return obj.comments.count()
 
     def get_share_link(self, obj):
         if obj.share_code:
@@ -445,6 +451,69 @@ class MatchMessageSerializer(serializers.ModelSerializer):
             'username': obj.sender.username,
             'avatar': avatar_url
         }
+
+
+class MatchCommentSerializer(serializers.ModelSerializer):
+    """Match comment serializer with author info and nested replies"""
+    author_info = serializers.SerializerMethodField()
+    author_name = serializers.SerializerMethodField()
+    replies = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MatchComment
+        fields = [
+            'id', 'match', 'author', 'author_name', 'author_info',
+            'content', 'parent_comment', 'replies', 'created_at', 'can_delete'
+        ]
+        read_only_fields = ['id', 'author', 'author_name', 'author_info', 'replies', 'created_at', 'can_delete']
+
+    def get_author_name(self, obj):
+        profile = getattr(obj.author, 'profile', None)
+        if profile and profile.full_name and profile.full_name.strip():
+            return profile.full_name.strip()
+        full_name = obj.author.get_full_name()
+        if full_name and full_name.strip():
+            return full_name.strip()
+        return obj.author.username
+
+    def get_author_info(self, obj):
+        request = self.context.get('request')
+        profile = getattr(obj.author, 'profile', None)
+        avatar_url = get_user_avatar_url(profile, request) if profile else None
+        skill_level = profile.skill_level if profile else 5
+        tier_name = profile.get_tier_name() if profile and hasattr(profile, 'get_tier_name') else 'Intermédiaire'
+
+        full_name = ''
+        if profile and profile.full_name and profile.full_name.strip():
+            full_name = profile.full_name.strip()
+        elif obj.author.get_full_name() and obj.author.get_full_name().strip():
+            full_name = obj.author.get_full_name().strip()
+        display_name = full_name if full_name else obj.author.username
+
+        return {
+            'id': obj.author.id,
+            'username': obj.author.username,
+            'full_name': full_name,
+            'display_name': display_name,
+            'avatar': avatar_url,
+            'skill_level': skill_level,
+            'tier_name': tier_name,
+        }
+
+    def get_replies(self, obj):
+        if obj.parent_comment is None:
+            children = obj.replies.all().select_related('author__profile')
+            return MatchCommentSerializer(children, many=True, context=self.context).data
+        return []
+
+    def get_can_delete(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return (obj.author == request.user or
+                obj.match.organizer == request.user or
+                request.user.is_staff)
 
 
 class RatingSerializer(serializers.ModelSerializer):

@@ -39,6 +39,8 @@ from .views import (
     MatchParticipantManageView,
     MatchInviteView,
     MatchChatView,
+    MatchCommentView,
+    MatchCommentDetailView,
     MatchFinishView,
     PendingRatingMatchView,
 
@@ -128,6 +130,8 @@ urlpatterns = [
     path('matches/<int:match_id>/participants/<int:participant_id>/', MatchParticipantManageView.as_view(), name='match_participant_manage'),
     path('matches/<int:match_id>/invite/', MatchInviteView.as_view(), name='match_invite'),
     path('matches/<int:match_id>/chat/', MatchChatView.as_view(), name='match_chat'),
+    path('matches/<int:match_id>/comments/', MatchCommentView.as_view(), name='match_comments'),
+    path('matches/<int:match_id>/comments/<int:comment_id>/', MatchCommentDetailView.as_view(), name='match_comment_detail'),
     path('matches/<int:match_id>/finish/', MatchFinishView.as_view(), name='match_finish'),
 
     # ============================================================================

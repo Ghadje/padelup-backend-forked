@@ -751,6 +751,28 @@ class MatchMessage(models.Model):
         return f"{self.sender.username} in {self.match.title}: {self.content[:50]}"
 
 
+class MatchComment(models.Model):
+    """Public match comments and Q&A (only for public matches)"""
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name='comments')
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='match_comments')
+    content = models.TextField(max_length=1000)
+    parent_comment = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='replies'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.author.username} on {self.match.title}: {self.content[:30]}"
+
+
 class Rating(models.Model):
     """Player rating system"""
     match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name='ratings')
@@ -819,6 +841,7 @@ class Notification(models.Model):
         ('booking_cancelled', 'Réservation annulée'),
         ('match_ended', 'Match terminé'),
         ('match_auto_resolved', 'Match résolu par défaut'),
+        ('match_comment', 'Nouveau commentaire sur le match'),
     ]
 
     TARGET_CHOICES = [
