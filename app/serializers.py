@@ -453,20 +453,37 @@ class MatchMessageSerializer(serializers.ModelSerializer):
         }
 
 
+def check_is_admin(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser or user.is_staff:
+        return True
+    try:
+        return getattr(user, 'profile', None) and user.profile.role in ['admin', 'superadmin']
+    except Exception:
+        return False
+
+
 class MatchCommentSerializer(serializers.ModelSerializer):
     """Match comment serializer with author info and nested replies"""
     author_info = serializers.SerializerMethodField()
     author_name = serializers.SerializerMethodField()
+    match_title = serializers.SerializerMethodField()
     replies = serializers.SerializerMethodField()
     can_delete = serializers.SerializerMethodField()
 
     class Meta:
         model = MatchComment
         fields = [
-            'id', 'match', 'author', 'author_name', 'author_info',
+            'id', 'match', 'match_title', 'author', 'author_name', 'author_info',
             'content', 'parent_comment', 'replies', 'created_at', 'can_delete'
         ]
-        read_only_fields = ['id', 'author', 'author_name', 'author_info', 'replies', 'created_at', 'can_delete']
+        read_only_fields = ['id', 'author', 'author_name', 'author_info', 'match_title', 'replies', 'created_at', 'can_delete']
+
+    def get_match_title(self, obj):
+        if obj.match:
+            return obj.match.title or f"Match #{obj.match.id}"
+        return ""
 
     def get_author_name(self, obj):
         profile = getattr(obj.author, 'profile', None)
@@ -513,7 +530,81 @@ class MatchCommentSerializer(serializers.ModelSerializer):
             return False
         return (obj.author == request.user or
                 obj.match.organizer == request.user or
-                request.user.is_staff)
+                check_is_admin(request.user))
+
+
+class AdminCommentSerializer(serializers.ModelSerializer):
+    """Admin moderation serializer for match comments"""
+    author_info = serializers.SerializerMethodField()
+    author_name = serializers.SerializerMethodField()
+    match_info = serializers.SerializerMethodField()
+    parent_info = serializers.SerializerMethodField()
+    replies_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MatchComment
+        fields = [
+            'id', 'match', 'match_info', 'author', 'author_name', 'author_info',
+            'content', 'parent_comment', 'parent_info', 'replies_count',
+            'created_at'
+        ]
+
+    def get_author_name(self, obj):
+        profile = getattr(obj.author, 'profile', None)
+        if profile and profile.full_name and profile.full_name.strip():
+            return profile.full_name.strip()
+        full_name = obj.author.get_full_name()
+        if full_name and full_name.strip():
+            return full_name.strip()
+        return obj.author.username
+
+    def get_author_info(self, obj):
+        request = self.context.get('request')
+        profile = getattr(obj.author, 'profile', None)
+        avatar_url = get_user_avatar_url(profile, request) if profile else None
+        skill_level = profile.skill_level if profile else 5
+        tier_name = profile.get_tier_name() if profile and hasattr(profile, 'get_tier_name') else 'Intermédiaire'
+        full_name = self.get_author_name(obj)
+
+        return {
+            'id': obj.author.id,
+            'username': obj.author.username,
+            'email': obj.author.email,
+            'full_name': full_name,
+            'display_name': full_name,
+            'avatar': avatar_url,
+            'skill_level': skill_level,
+            'tier_name': tier_name,
+        }
+
+    def get_match_info(self, obj):
+        if not obj.match:
+            return None
+        return {
+            'id': obj.match.id,
+            'title': obj.match.title or f"Match #{obj.match.id}",
+            'date_time': obj.match.date_time,
+            'club_name': obj.match.club.name if obj.match.club else None,
+            'court_name': obj.match.court.name if obj.match.court else None,
+            'is_public': obj.match.is_public,
+            'status': obj.match.status,
+        }
+
+    def get_parent_info(self, obj):
+        if not obj.parent_comment:
+            return None
+        parent_author = obj.parent_comment.author
+        author_name = parent_author.username
+        if hasattr(parent_author, 'profile') and parent_author.profile.full_name:
+            author_name = parent_author.profile.full_name
+        return {
+            'id': obj.parent_comment.id,
+            'author_name': author_name,
+            'content_preview': obj.parent_comment.content[:80] + ('...' if len(obj.parent_comment.content) > 80 else ''),
+        }
+
+    def get_replies_count(self, obj):
+        return obj.replies.count()
 
 
 class RatingSerializer(serializers.ModelSerializer):

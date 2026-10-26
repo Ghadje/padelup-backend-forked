@@ -41,6 +41,8 @@ from .views import (
     MatchChatView,
     MatchCommentView,
     MatchCommentDetailView,
+    AdminCommentModerationView,
+    AdminCommentDetailView,
     MatchFinishView,
     PendingRatingMatchView,
 
@@ -132,6 +134,8 @@ urlpatterns = [
     path('matches/<int:match_id>/chat/', MatchChatView.as_view(), name='match_chat'),
     path('matches/<int:match_id>/comments/', MatchCommentView.as_view(), name='match_comments'),
     path('matches/<int:match_id>/comments/<int:comment_id>/', MatchCommentDetailView.as_view(), name='match_comment_detail'),
+    path('admin/comments/', AdminCommentModerationView.as_view(), name='admin_comment_moderation'),
+    path('admin/comments/<int:comment_id>/', AdminCommentDetailView.as_view(), name='admin_comment_detail'),
     path('matches/<int:match_id>/finish/', MatchFinishView.as_view(), name='match_finish'),
 
     # ============================================================================

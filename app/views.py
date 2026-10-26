@@ -117,7 +117,7 @@ from .serializers import (
     UserSerializer, ProfileSerializer, ProfileSetupSerializer, ProfileUpdateSerializer,
     PlayerStatsSerializer, ClubSerializer, CourtSerializer, BookingSerializer,
     MatchSerializer, MatchDetailSerializer, MatchParticipantSerializer,
-    MatchMessageSerializer, MatchCommentSerializer, RatingSerializer, CourtRatingSerializer,
+    MatchMessageSerializer, MatchCommentSerializer, AdminCommentSerializer, RatingSerializer, CourtRatingSerializer,
     NotificationSerializer, CommunityPostSerializer, PostReplySerializer,
     CommunityGroupSerializer, FriendRequestSerializer, FriendshipSerializer,
     PrivateMessageSerializer, BlockedUserSerializer, RegisterSerializer,
@@ -2040,8 +2040,8 @@ class MatchCommentView(APIView):
         except Match.DoesNotExist:
             return Response({'error': 'Match non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
-        # STRICT RULE: Comments only allowed on public matches
-        if not match.is_public:
+        # Comments only allowed on public matches (admins can view all)
+        if not match.is_public and not is_admin_user(request.user):
             return Response(
                 {'error': 'Les commentaires ne sont pas activés pour les matchs privés.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -2148,8 +2148,65 @@ class MatchCommentDetailView(APIView):
 
         is_author = comment.author == request.user
         is_organizer = comment.match.organizer == request.user
-        if not (is_author or is_organizer or request.user.is_staff):
+        if not (is_author or is_organizer or is_admin_user(request.user)):
             return Response({'error': 'Non autorisé à supprimer ce commentaire.'}, status=status.HTTP_403_FORBIDDEN)
+
+        comment.delete()
+        return Response({'message': 'Commentaire supprimé avec succès.'}, status=status.HTTP_200_OK)
+
+
+class AdminCommentModerationView(APIView):
+    """Admin endpoint to view, search, and moderate all match comments across public matches"""
+    permission_classes = [IsAdminUserRole]
+
+    def get(self, request):
+        search = request.query_params.get('search', '').strip()
+        match_id = request.query_params.get('match_id')
+        comment_type = request.query_params.get('type')  # 'parent', 'reply', or 'all'
+
+        comments = MatchComment.objects.select_related(
+            'match', 'match__club', 'match__court', 'author', 'author__profile',
+            'parent_comment', 'parent_comment__author', 'parent_comment__author__profile'
+        ).prefetch_related('replies').order_by('-created_at')
+
+        if match_id:
+            comments = comments.filter(match_id=match_id)
+
+        if comment_type == 'parent':
+            comments = comments.filter(parent_comment__isnull=True)
+        elif comment_type == 'reply':
+            comments = comments.filter(parent_comment__isnull=False)
+
+        if search:
+            comments = comments.filter(
+                Q(content__icontains=search) |
+                Q(author__username__icontains=search) |
+                Q(author__profile__full_name__icontains=search) |
+                Q(match__title__icontains=search) |
+                Q(match__club__name__icontains=search)
+            )
+
+        paginator = PageNumberPagination()
+        try:
+            page_size = int(request.query_params.get('page_size', 20))
+            paginator.page_size = min(max(page_size, 1), 100)
+        except (ValueError, TypeError):
+            paginator.page_size = 20
+
+        paginated_comments = paginator.paginate_queryset(comments, request)
+        serializer = AdminCommentSerializer(paginated_comments, many=True, context={'request': request})
+        return paginator.get_paginated_response(serializer.data)
+
+
+class AdminCommentDetailView(APIView):
+    """Admin endpoint to delete any comment directly by comment ID"""
+    permission_classes = [IsAdminUserRole]
+
+    def delete(self, request, comment_id):
+        try:
+            comment = MatchComment.objects.get(id=comment_id)
+        except MatchComment.DoesNotExist:
+            return Response({'error': 'Commentaire non trouvé.'}, status=status.HTTP_404_NOT_FOUND)
 
         comment.delete()
         return Response({'message': 'Commentaire supprimé avec succès.'}, status=status.HTTP_200_OK)
