@@ -2212,6 +2212,63 @@ class AdminCommentDetailView(APIView):
         return Response({'message': 'Commentaire supprimé avec succès.'}, status=status.HTTP_200_OK)
 
 
+class AdminBulkDeleteView(APIView):
+    """Admin endpoint to bulk delete entities (users, players, clubs, courts, matches, comments, bookings)"""
+    permission_classes = [IsAdminUserRole]
+
+    def post(self, request):
+        entity = request.data.get('entity')
+        ids = request.data.get('ids', [])
+
+        if not entity or not isinstance(ids, list) or len(ids) == 0:
+            return Response({'error': 'Entité et liste d\'identifiants requises.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            ids = [int(i) for i in ids]
+        except (ValueError, TypeError):
+            return Response({'error': 'Identifiants invalides.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        deleted_count = 0
+
+        if entity in ['users', 'players']:
+            qs = User.objects.filter(id__in=ids).exclude(id=request.user.id)
+            deleted_count = qs.count()
+            qs.delete()
+
+        elif entity == 'clubs':
+            qs = Club.objects.filter(id__in=ids)
+            deleted_count = qs.count()
+            qs.delete()
+
+        elif entity == 'courts':
+            qs = Court.objects.filter(id__in=ids)
+            deleted_count = qs.count()
+            qs.delete()
+
+        elif entity == 'matches':
+            qs = Match.objects.filter(id__in=ids)
+            deleted_count = qs.count()
+            qs.delete()
+
+        elif entity == 'comments':
+            qs = MatchComment.objects.filter(id__in=ids)
+            deleted_count = qs.count()
+            qs.delete()
+
+        elif entity == 'bookings':
+            qs = Booking.objects.filter(id__in=ids)
+            deleted_count = qs.count()
+            qs.delete()
+
+        else:
+            return Response({'error': f'Entité "{entity}" non supportée.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            'message': f'{deleted_count} éléments supprimés avec succès.',
+            'deleted_count': deleted_count
+        }, status=status.HTTP_200_OK)
+
+
 class MatchFinishView(APIView):
     """Mark match as finished/completed with winners and losers"""
     permission_classes = [IsAuthenticated]

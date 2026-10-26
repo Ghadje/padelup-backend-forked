@@ -43,6 +43,7 @@ from .views import (
     MatchCommentDetailView,
     AdminCommentModerationView,
     AdminCommentDetailView,
+    AdminBulkDeleteView,
     MatchFinishView,
     PendingRatingMatchView,
 
@@ -136,6 +137,7 @@ urlpatterns = [
     path('matches/<int:match_id>/comments/<int:comment_id>/', MatchCommentDetailView.as_view(), name='match_comment_detail'),
     path('admin/comments/', AdminCommentModerationView.as_view(), name='admin_comment_moderation'),
     path('admin/comments/<int:comment_id>/', AdminCommentDetailView.as_view(), name='admin_comment_detail'),
+    path('admin/bulk-delete/', AdminBulkDeleteView.as_view(), name='admin_bulk_delete'),
     path('matches/<int:match_id>/finish/', MatchFinishView.as_view(), name='match_finish'),
 
     # ============================================================================
