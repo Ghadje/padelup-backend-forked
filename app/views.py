@@ -103,7 +103,7 @@ from .models import (
     Profile, PlayerStats, Club, Court, Booking, Match, MatchParticipant,
     MatchMessage, MatchComment, Rating, CourtRating, Notification, DeviceToken, CommunityPost,
     PostReply, CommunityGroup, FriendRequest, Friendship, PrivateMessage,
-    BlockedUser, PasswordResetCode, EmailVerificationCode
+    BlockedUser, PasswordResetCode, PasswordChangeAttempt, EmailVerificationCode
 )
 from .fcm_service import create_notification, send_push_notification
 from .email_service import (
@@ -521,19 +521,38 @@ class LogoutView(APIView):
 
 
 class PasswordResetRequestView(APIView):
-    """Request a password reset code"""
+    """Request a password reset code (limited to 3 emails/day)"""
     permission_classes = [AllowAny]
 
     def post(self, request):
         email = request.data.get('email', '').strip()
         if not email:
-            return Response({'detail': 'Email requis'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Email requis', 'error': 'Email requis'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
             # Return success even if email doesn't exist (security: don't reveal accounts)
             return Response({'message': 'Si un compte existe avec cet email, un code a été envoyé.'})
+
+        # Rate limit: maximum 3 password reset emails in 24 hours
+        one_day_ago = timezone.now() - timedelta(hours=24)
+        recent_requests = PasswordResetCode.objects.filter(
+            user=user,
+            created_at__gte=one_day_ago
+        ).count()
+
+        if recent_requests >= 3:
+            return Response(
+                {
+                    'error': 'Vous avez atteint le nombre maximum de tentatives de réinitialisation de mot de passe (3 par jour). Veuillez réessayer demain.',
+                    'detail': 'Vous avez atteint le nombre maximum de tentatives de réinitialisation de mot de passe (3 par jour). Veuillez réessayer demain.',
+                    'message': 'Vous avez atteint le nombre maximum de tentatives de réinitialisation de mot de passe (3 par jour). Veuillez réessayer demain.',
+                    'attempts_exceeded': True,
+                    'remaining_attempts': 0
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
 
         # Invalidate previous codes
         PasswordResetCode.objects.filter(user=user, is_used=False).update(is_used=True)
@@ -548,7 +567,11 @@ class PasswordResetRequestView(APIView):
         except Exception as e:
             print(f'Failed to send password reset email: {e}')
 
-        return Response({'message': 'Si un compte existe avec cet email, un code a été envoyé.'})
+        remaining = max(0, 3 - (recent_requests + 1))
+        return Response({
+            'message': 'Si un compte existe avec cet email, un code a été envoyé.',
+            'remaining_attempts': remaining
+        })
 
 
 class PasswordResetConfirmView(APIView):
@@ -593,17 +616,37 @@ class PasswordResetConfirmView(APIView):
 
 
 class ChangePasswordView(APIView):
-    """Change password for authenticated user"""
+    """Change password for authenticated user (limited to 3 attempts/day)"""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        user = request.user
+
+        # Rate limit: maximum 3 password changes/attempts in 24 hours
+        one_day_ago = timezone.now() - timedelta(hours=24)
+        recent_changes = PasswordChangeAttempt.objects.filter(
+            user=user,
+            created_at__gte=one_day_ago
+        ).count()
+
+        if recent_changes >= 3:
+            return Response(
+                {
+                    'error': 'Vous avez atteint le nombre maximum de tentatives de modification de mot de passe (3 par jour). Veuillez réessayer demain.',
+                    'detail': 'Vous avez atteint le nombre maximum de tentatives de modification de mot de passe (3 par jour). Veuillez réessayer demain.',
+                    'message': 'Vous avez atteint le nombre maximum de tentatives de modification de mot de passe (3 par jour). Veuillez réessayer demain.',
+                    'attempts_exceeded': True,
+                    'remaining_attempts': 0
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         old_password = request.data.get('old_password')
         new_password = request.data.get('new_password')
 
         if not old_password or not new_password:
             return Response({'error': 'Ancien et nouveau mot de passe requis'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = request.user
         if not user.check_password(old_password):
             return Response({'error': 'L\'ancien mot de passe est incorrect'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -613,7 +656,14 @@ class ChangePasswordView(APIView):
         user.set_password(new_password)
         user.save()
 
-        return Response({'message': 'Mot de passe changé avec succès'}, status=status.HTTP_200_OK)
+        # Record password change
+        PasswordChangeAttempt.objects.create(user=user, success=True)
+
+        remaining = max(0, 3 - (recent_changes + 1))
+        return Response({
+            'message': 'Mot de passe changé avec succès',
+            'remaining_attempts': remaining
+        }, status=status.HTTP_200_OK)
 
 
 class ProfileSetupView(APIView):

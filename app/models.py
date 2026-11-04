@@ -1110,6 +1110,18 @@ class PasswordResetCode(models.Model):
         return f"Reset code for {self.user.username} - {'used' if self.is_used else 'active'}"
 
 
+class PasswordChangeAttempt(models.Model):
+    """Tracks password change attempts for authenticated users (limit 3 per day)"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_change_attempts')
+    created_at = models.DateTimeField(auto_now_add=True)
+    success = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Password change attempt for {self.user.username} at {self.created_at}"
+
 from django.dispatch import receiver
 
 @receiver(post_save, sender=User)
