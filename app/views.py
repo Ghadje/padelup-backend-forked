@@ -1487,6 +1487,7 @@ class MatchListView(APIView):
         search = request.query_params.get('search', '')  # Add search parameter
         share_code = request.query_params.get('share_code', '')
         is_dashboard = request.query_params.get('dashboard') == 'true'
+        is_edited_filter = request.query_params.get('is_edited', '')
 
         # Get blocked user IDs (only if authenticated)
         if request.user.is_authenticated:
@@ -1530,6 +1531,11 @@ class MatchListView(APIView):
 
         if match_type:
             matches = matches.filter(match_type=match_type)
+
+        if is_edited_filter.lower() == 'true':
+            matches = matches.filter(is_edited=True)
+        elif is_edited_filter.lower() == 'false':
+            matches = matches.filter(is_edited=False)
 
         if date_from:
             # Handle both date and datetime formats
@@ -1725,9 +1731,13 @@ class MatchDetailView(APIView):
                 return Response({'message': 'Match annulé avec succès'}, status=status.HTTP_200_OK)
 
             # Regular update
+            is_only_status = set(request.data.keys()) <= {'status'}
             serializer = MatchSerializer(match, data=request.data, partial=True)
             if serializer.is_valid():
-                serializer.save()
+                if not is_only_status:
+                    serializer.save(is_edited=True, edited_at=timezone.now())
+                else:
+                    serializer.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Match.DoesNotExist:

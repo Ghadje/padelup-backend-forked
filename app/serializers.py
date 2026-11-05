@@ -354,12 +354,12 @@ class MatchSerializer(serializers.ModelSerializer):
             'min_skill_level_old', 'max_skill_level_old',
             'status', 'is_public', 'is_open', 'share_code', 'share_link',
             'participants', 'participants_count', 'comments_count', 'location', 'winners', 'losers',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'is_edited', 'edited_at'
         ]
         read_only_fields = [
             'id', 'organizer', 'organizer_name', 'organizer_avatar', 'organizer_info', 'club_name', 'court_name',
             'participants_count', 'comments_count', 'location', 'share_code', 'share_link',
-            'date', 'start_time', 'end_time', 'created_at', 'updated_at'
+            'date', 'start_time', 'end_time', 'created_at', 'updated_at', 'is_edited', 'edited_at'
         ]
 
     def get_organizer_name(self, obj):
