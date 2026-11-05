@@ -540,7 +540,7 @@ class Match(models.Model):
                 create_notification(
                     user=user,
                     notification_type='match_ended',
-                    message=f"Le match du {self.date_time.strftime('%d/%m')} est terminé ! Donnez votre avis et notez les participants.",
+                    message=f"Le match du {(timezone.localtime(self.date_time) if timezone.is_aware(self.date_time) else self.date_time).strftime('%d/%m')} est terminé ! Donnez votre avis et notez les participants.",
                     match=self,
                     target='mobile',
                     title="PadelUp - Match terminé",
@@ -597,7 +597,7 @@ class Match(models.Model):
             # 2. Send in-app notification + FCM push
             try:
                 if is_org:
-                    msg = f"Délai de 48h écoulé : vous avez été désigné vainqueur par défaut pour le match du {self.date_time.strftime('%d/%m')}."
+                    msg = f"Délai de 48h écoulé : vous avez été désigné vainqueur par défaut pour le match du {(timezone.localtime(self.date_time) if timezone.is_aware(self.date_time) else self.date_time).strftime('%d/%m')}."
                 else:
                     msg = f"Délai de 48h écoulé : le créateur ({self.organizer.username}) est désigné vainqueur par défaut, aucun avis n'a été enregistré."
 

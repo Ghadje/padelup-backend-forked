@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
+from django.utils import timezone
 from django.utils.html import strip_tags
 
 
@@ -112,7 +113,8 @@ def _format_match_details(match):
     if hasattr(match, 'date') and match.date:
         date_obj = match.date
     elif hasattr(match, 'date_time') and match.date_time:
-        date_obj = match.date_time.date()
+        local_dt = timezone.localtime(match.date_time) if timezone.is_aware(match.date_time) else match.date_time
+        date_obj = local_dt.date()
     else:
         date_obj = None
 
@@ -126,7 +128,8 @@ def _format_match_details(match):
     if hasattr(match, 'time') and match.time:
         time_str = match.time.strftime('%H:%M')
     elif hasattr(match, 'date_time') and match.date_time:
-        time_str = match.date_time.strftime('%H:%M')
+        local_dt = timezone.localtime(match.date_time) if timezone.is_aware(match.date_time) else match.date_time
+        time_str = local_dt.strftime('%H:%M')
     else:
         time_str = ''
 
@@ -401,7 +404,8 @@ def send_match_ended_email(user, match):
         return False
 
     club_name = match.club.name if match.club else "Club Padel"
-    date_str = match.date_time.strftime('%d/%m/%Y à %H:%M')
+    local_dt = timezone.localtime(match.date_time) if timezone.is_aware(match.date_time) else match.date_time
+    date_str = local_dt.strftime('%d/%m/%Y à %H:%M')
     
     subject = f'PadelUp - Match terminé ({club_name})'
     html_content = f"""
@@ -440,7 +444,8 @@ def send_match_auto_resolved_email(user, match, is_organizer=False):
         return False
 
     club_name = match.club.name if match.club else "Club Padel"
-    date_str = match.date_time.strftime('%d/%m/%Y')
+    local_dt = timezone.localtime(match.date_time) if timezone.is_aware(match.date_time) else match.date_time
+    date_str = local_dt.strftime('%d/%m/%Y')
     organizer_name = match.organizer.username
 
     subject = f'PadelUp - Clôture automatique du match ({club_name})'

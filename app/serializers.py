@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
@@ -408,19 +409,28 @@ class MatchSerializer(serializers.ModelSerializer):
     def get_date(self, obj):
         if obj.booking:
             return obj.booking.date
-        return obj.date_time.date()
+        if obj.date_time:
+            local_dt = timezone.localtime(obj.date_time) if timezone.is_aware(obj.date_time) else obj.date_time
+            return local_dt.date()
+        return None
 
     def get_start_time(self, obj):
         if obj.booking:
             return obj.booking.start_time
-        return obj.date_time.time()
+        if obj.date_time:
+            local_dt = timezone.localtime(obj.date_time) if timezone.is_aware(obj.date_time) else obj.date_time
+            return local_dt.time()
+        return None
 
     def get_end_time(self, obj):
         if obj.booking:
             return obj.booking.end_time
-        from datetime import timedelta
-        end_time = obj.date_time + timedelta(minutes=obj.duration)
-        return end_time.time()
+        if obj.date_time:
+            from datetime import timedelta
+            local_dt = timezone.localtime(obj.date_time) if timezone.is_aware(obj.date_time) else obj.date_time
+            end_time = local_dt + timedelta(minutes=obj.duration)
+            return end_time.time()
+        return None
 
     def create(self, validated_data):
         match = super().create(validated_data)
