@@ -388,6 +388,7 @@ class Match(models.Model):
     # Completion & Auto-resolution flags
     end_notification_sent = models.BooleanField(default=False)
     auto_resolved_48h = models.BooleanField(default=False)
+    reminder_30m_sent = models.BooleanField(default=False)
 
     # Edit tracking
     is_edited = models.BooleanField(default=False)
@@ -481,6 +482,7 @@ class Match(models.Model):
                 self.status = 'full'
                 self.is_open = False
                 self.save(update_fields=['status', 'is_open'])
+            self._check_and_trigger_30m_reminder()
 
         # Otherwise it should be open (if not started yet and not full)
         elif current_datetime < match_start and accepted_count < self.max_players:
@@ -488,6 +490,45 @@ class Match(models.Model):
                 self.status = 'open'
                 self.is_open = True
                 self.save(update_fields=['status', 'is_open'])
+            self._check_and_trigger_30m_reminder()
+
+    def _check_and_trigger_30m_reminder(self):
+        """When match is starting in <= 30 minutes, notify all confirmed match members (idempotent)"""
+        if self.reminder_30m_sent or self.status in ['cancelled', 'completed']:
+            return
+
+        now = timezone.now()
+        match_start = self.get_match_datetime_start()
+        if not match_start or match_start < now:
+            return
+
+        diff_seconds = (match_start - now).total_seconds()
+        # Trigger when match starts within 35 minutes (allowing slight buffer for periodic checks)
+        if 0 <= diff_seconds <= 35 * 60:
+            self.reminder_30m_sent = True
+            self.save(update_fields=['reminder_30m_sent'])
+
+            try:
+                from .fcm_service import create_notification, get_match_members
+                members = get_match_members(self)
+                start_str = (timezone.localtime(match_start) if timezone.is_aware(match_start) else match_start).strftime('%H:%M')
+                for user in members:
+                    create_notification(
+                        user=user,
+                        notification_type='match_reminder',
+                        match=self,
+                        message=f'Rappel : Votre match "{self.title}" commence à {start_str} (dans moins de 30 min) ! Préparez vos raquettes.',
+                        target='mobile',
+                        title="Match dans 30 minutes",
+                        data={
+                            'action': 'match_reminder',
+                            'match_id': str(self.id),
+                            'type': 'match_reminder',
+                        }
+                    )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Error sending 30m match reminder for match {self.id}: {e}")
 
     def _check_and_set_solo_creator_winner(self):
         """If match has ended, no winners/losers have been set, and organizer is the only player, mark organizer as winner by default"""
@@ -846,6 +887,12 @@ class Notification(models.Model):
         ('match_ended', 'Match terminé'),
         ('match_auto_resolved', 'Match résolu par défaut'),
         ('match_comment', 'Nouveau commentaire sur le match'),
+        ('match_player_left', 'Joueur a quitté le match'),
+        ('match_player_kicked', 'Joueur retiré du match'),
+        ('match_player_joined', 'Nouveau joueur dans le match'),
+        ('match_edited', 'Match modifié'),
+        ('match_deleted', 'Match supprimé'),
+        ('public_match_created', 'Nouveau match public de vos amis'),
     ]
 
     TARGET_CHOICES = [
@@ -858,8 +905,8 @@ class Notification(models.Model):
     type = models.CharField(max_length=30, choices=TYPE_CHOICES)
     target = models.CharField(max_length=10, choices=TARGET_CHOICES, default='mobile')
     club = models.ForeignKey('Club', on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
-    match = models.ForeignKey(Match, on_delete=models.CASCADE, null=True, blank=True)
-    friend_request = models.ForeignKey('FriendRequest', on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
+    match = models.ForeignKey(Match, on_delete=models.SET_NULL, null=True, blank=True)
+    friend_request = models.ForeignKey('FriendRequest', on_delete=models.SET_NULL, null=True, blank=True, related_name='notifications')
     message = models.TextField()
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

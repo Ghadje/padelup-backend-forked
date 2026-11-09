@@ -105,7 +105,10 @@ from .models import (
     PostReply, CommunityGroup, FriendRequest, Friendship, PrivateMessage,
     BlockedUser, PasswordResetCode, PasswordChangeAttempt, EmailVerificationCode
 )
-from .fcm_service import create_notification, send_push_notification
+from .fcm_service import (
+    create_notification, send_push_notification,
+    get_user_display_name, get_match_members
+)
 from .email_service import (
 
     send_welcome_email, send_password_reset_email, send_verification_email,
@@ -1652,6 +1655,27 @@ class MatchListView(APIView):
             except Exception as e:
                 logger.error(f"Failed to send match creation email: {e}")
 
+            # If match is created publicly, notify all friends of the creator
+            if match.is_public:
+                try:
+                    creator_name = get_user_display_name(request.user)
+                    friendships = Friendship.objects.filter(
+                        Q(user1=request.user) | Q(user2=request.user)
+                    ).select_related('user1', 'user2')
+                    friends = [f.user2 if f.user1 == request.user else f.user1 for f in friendships]
+                    for friend in friends:
+                        create_notification(
+                            user=friend,
+                            notification_type='public_match_created',
+                            match=match,
+                            message=f'{creator_name} vient de créer un match public : "{match.title}". Rejoignez la partie !',
+                            target='mobile',
+                            title=f"Nouveau match de {creator_name}",
+                            data={'match_id': str(match.id), 'type': 'public_match_created'}
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to notify friends about public match creation: {e}")
+
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1735,7 +1759,22 @@ class MatchDetailView(APIView):
             serializer = MatchSerializer(match, data=request.data, partial=True)
             if serializer.is_valid():
                 if not is_only_status:
-                    serializer.save(is_edited=True, edited_at=timezone.now())
+                    updated_match = serializer.save(is_edited=True, edited_at=timezone.now())
+                    # Notify all match members (excluding the editor)
+                    try:
+                        members_to_notify = get_match_members(updated_match, exclude_user=request.user)
+                        for member in members_to_notify:
+                            create_notification(
+                                user=member,
+                                notification_type='match_edited',
+                                match=updated_match,
+                                message=f'Le match "{updated_match.title}" a été modifié par l\'organisateur. Consultez les nouvelles informations.',
+                                target='mobile',
+                                title="Match modifié",
+                                data={'match_id': str(updated_match.id), 'type': 'match_edited'}
+                            )
+                    except Exception as e:
+                        logger.error(f"Failed to send match edited notification: {e}")
                 else:
                     serializer.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
@@ -1752,6 +1791,23 @@ class MatchDetailView(APIView):
             is_admin = is_admin_user(request.user)
             if match.organizer != request.user and not is_admin:
                 return Response({'error': 'Seul l\'organisateur ou un administrateur peut supprimer le match'}, status=status.HTTP_403_FORBIDDEN)
+
+            # Notify all match members via in-app notification & push before deletion
+            try:
+                date_str = (timezone.localtime(match.date_time) if timezone.is_aware(match.date_time) else match.date_time).strftime('%d/%m à %H:%M')
+                members_to_notify = get_match_members(match, exclude_user=request.user)
+                for member in members_to_notify:
+                    create_notification(
+                        user=member,
+                        notification_type='match_deleted',
+                        match=None,  # Decoupled from foreign key so deletion does not delete notification
+                        message=f'Le match "{match.title}" prévu le {date_str} a été annulé et supprimé par l\'organisateur.',
+                        target='mobile',
+                        title="Match supprimé",
+                        data={'match_title': match.title, 'type': 'match_deleted'}
+                    )
+            except Exception as e:
+                logger.error(f"Failed to send match deleted notifications: {e}")
 
             # Notify confirmed participants via email before deletion
             for participant in match.participants.filter(status='confirmed'):
@@ -1817,21 +1873,35 @@ class MatchJoinView(APIView):
             )
 
             # Update match status if full
-            if match.get_accepted_participants_count() >= match.max_players:
+            is_full = match.get_accepted_participants_count() >= match.max_players
+            if is_full:
                 match.status = 'full'
                 match.is_open = False
                 match.save()
 
-            # Notify organizer in-app & push
-            create_notification(
-                user=match.organizer,
-                notification_type='match_accepted',
-                match=match,
-                message=f'{request.user.username} a rejoint votre match "{match.title}"',
-                target='mobile',
-                title="Joueur rejoint"
-            )
+            # Notify all match members (organizer + other confirmed players) in-app & push
+            try:
+                joined_name = get_user_display_name(request.user)
+                members_to_notify = get_match_members(match, exclude_user=request.user)
 
+                for member in members_to_notify:
+                    is_org = (member == match.organizer)
+                    if is_org:
+                        msg = f'{joined_name} a rejoint votre match "{match.title}".' + (' Le match est maintenant complet !' if is_full else '')
+                    else:
+                        msg = f'{joined_name} a rejoint le match "{match.title}".' + (' Le match est maintenant complet !' if is_full else '')
+
+                    create_notification(
+                        user=member,
+                        notification_type='match_player_joined',
+                        match=match,
+                        message=msg,
+                        target='mobile',
+                        title="Nouveau joueur dans le match",
+                        data={'match_id': str(match.id), 'type': 'match_player_joined'}
+                    )
+            except Exception as e:
+                logger.error(f"Failed to send player joined notifications: {e}")
 
             # Send confirmation email to the joining player
             try:
@@ -1859,6 +1929,9 @@ class MatchJoinView(APIView):
             if not participant:
                 return Response({'error': 'Vous ne participez pas à ce match'}, status=status.HTTP_400_BAD_REQUEST)
 
+            quitter_name = get_user_display_name(request.user)
+            members_to_notify = get_match_members(match, exclude_user=request.user)
+
             participant.delete()
 
             # Update match status if was full
@@ -1866,6 +1939,21 @@ class MatchJoinView(APIView):
                 match.status = 'open'
                 match.is_open = True
                 match.save()
+
+            # Notify all remaining match members in-app & push
+            try:
+                for member in members_to_notify:
+                    create_notification(
+                        user=member,
+                        notification_type='match_player_left',
+                        match=match,
+                        message=f'{quitter_name} a quitté le match "{match.title}". Une place est à nouveau disponible !',
+                        target='mobile',
+                        title="Désistement d'un joueur",
+                        data={'match_id': str(match.id), 'type': 'match_player_left'}
+                    )
+            except Exception as e:
+                logger.error(f"Failed to send player left notifications: {e}")
 
             return Response({'message': 'Vous avez quitté le match avec succès'}, status=status.HTTP_200_OK)
         except Match.DoesNotExist:
@@ -1900,17 +1988,40 @@ class MatchParticipantManageView(APIView):
                 return Response({'error': 'Participant non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
             removed_user = participant.user
+            kicked_name = get_user_display_name(removed_user)
 
-            # Notify the removed participant in-app & push
-            create_notification(
-                user=removed_user,
-                notification_type='match_cancelled',
-                match=match,
-                message=f'Vous avez été retiré du match "{match.title}"',
-                target='mobile',
-                title="Retiré du match"
-            )
+            # 1. Notify the removed participant in-app & push
+            if removed_user:
+                try:
+                    create_notification(
+                        user=removed_user,
+                        notification_type='match_player_kicked',
+                        match=match,
+                        message=f'Vous avez été retiré du match "{match.title}" par l\'organisateur',
+                        target='mobile',
+                        title="Retiré du match",
+                        data={'match_id': str(match.id), 'type': 'match_player_kicked'}
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify kicked player: {e}")
 
+            # 2. Notify all other match members (excluding the organizer and the kicked player)
+            try:
+                other_members = get_match_members(match, exclude_user=request.user)
+                if removed_user:
+                    other_members.discard(removed_user)
+                for member in other_members:
+                    create_notification(
+                        user=member,
+                        notification_type='match_player_kicked',
+                        match=match,
+                        message=f'{kicked_name} a été retiré du match "{match.title}". Une place est libre !',
+                        target='mobile',
+                        title="Joueur retiré du match",
+                        data={'match_id': str(match.id), 'type': 'match_player_kicked'}
+                    )
+            except Exception as e:
+                logger.error(f"Failed to notify other match members about kicked player: {e}")
 
             # Send email to the removed player
             if removed_user:
@@ -1941,9 +2052,10 @@ class MatchInviteView(APIView):
         try:
             match = Match.objects.get(id=match_id)
 
-            # Only organizer can invite friends
-            if match.organizer != request.user:
-                return Response({'error': 'Seul l\'organisateur peut inviter des amis'}, status=status.HTTP_403_FORBIDDEN)
+            # Organizer or any confirmed match member can invite friends
+            is_member = (match.organizer == request.user) or match.participants.filter(match=match, user=request.user, status='confirmed').exists()
+            if not is_member:
+                return Response({'error': 'Seuls les membres du match peuvent inviter des amis'}, status=status.HTTP_403_FORBIDDEN)
 
             # Get friend IDs from request
             friend_ids = request.data.get('friend_ids', [])
@@ -1959,6 +2071,7 @@ class MatchInviteView(APIView):
 
             results = []
             invited_count = 0
+            inviter_name = get_user_display_name(request.user)
 
             for friend_id in friend_ids:
                 try:
@@ -2002,9 +2115,10 @@ class MatchInviteView(APIView):
                         user=friend,
                         notification_type='match_invite',
                         match=match,
-                        message=f'{request.user.username} vous a invité à rejoindre "{match.title}"',
+                        message=f'{inviter_name} vous a invité à rejoindre "{match.title}"',
                         target='mobile',
-                        title="Invitation à un match"
+                        title="Invitation à un match",
+                        data={'match_id': str(match.id), 'type': 'match_invite'}
                     )
 
 
@@ -2163,15 +2277,11 @@ class MatchCommentView(APIView):
         # Exclude commenter
         recipients = [u for u in recipients_set if u and u != request.user]
 
-        author_display_name = request.user.username
-        if hasattr(request.user, 'profile') and request.user.profile.full_name and request.user.profile.full_name.strip():
-            author_display_name = request.user.profile.full_name.strip()
-        elif request.user.get_full_name() and request.user.get_full_name().strip():
-            author_display_name = request.user.get_full_name().strip()
+        author_display_name = get_user_display_name(request.user)
 
         for recipient in recipients:
             is_reply = parent_comment is not None
-            title = f"Réponse sur le match {match.title}" if is_reply else f"Question sur votre match {match.title}"
+            title = f"Réponse sur {match.title}" if is_reply else f"Nouveau commentaire sur {match.title}"
             body_preview = content[:60] + ('...' if len(content) > 60 else '')
             message_text = f"{author_display_name} : {body_preview}"
 
@@ -2798,8 +2908,7 @@ class FriendRequestView(APIView):
                 message=message
             )
 
-            sender_full_name = f"{request.user.first_name} {request.user.last_name}".strip()
-            sender_name = sender_full_name or request.user.username
+            sender_name = get_user_display_name(request.user)
 
             # Send notification & push
             create_notification(
@@ -2808,7 +2917,8 @@ class FriendRequestView(APIView):
                 friend_request=friend_request,
                 message=f"{sender_name} vous a envoyé une demande d'ami",
                 target='mobile',
-                title="Demande d'ami"
+                title="Demande d'ami",
+                data={'friend_request_id': str(friend_request.id), 'type': 'friend_request'}
             )
 
             return Response(FriendRequestSerializer(friend_request).data, status=status.HTTP_201_CREATED)
@@ -2841,8 +2951,7 @@ class FriendRequestManageView(APIView):
                 friend_request.status = 'accepted'
                 friend_request.save()
 
-                responder_full_name = f"{request.user.first_name} {request.user.last_name}".strip()
-                responder_name = responder_full_name or request.user.username
+                responder_name = get_user_display_name(request.user)
 
                 # Notify sender in-app & push
                 create_notification(
@@ -2851,7 +2960,8 @@ class FriendRequestManageView(APIView):
                     friend_request=friend_request,
                     message=f"{responder_name} a accepté votre demande d'ami",
                     target='mobile',
-                    title="Demande d'ami acceptée"
+                    title="Demande d'ami acceptée",
+                    data={'friend_request_id': str(friend_request.id), 'type': 'friend_accepted'}
                 )
 
 

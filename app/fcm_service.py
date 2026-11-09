@@ -224,3 +224,38 @@ def create_notification(
     except Exception as e:
         logger.error(f"Failed to create notification for {user.username}: {e}")
         return None
+
+
+def get_user_display_name(user):
+    """Return user's full name if available, otherwise first+last or username."""
+    if not user:
+        return "Utilisateur"
+    try:
+        if hasattr(user, 'profile') and user.profile.full_name and user.profile.full_name.strip():
+            return user.profile.full_name.strip()
+    except Exception:
+        pass
+    full_name = f"{user.first_name} {user.last_name}".strip()
+    if full_name:
+        return full_name
+    return user.username
+
+
+def get_match_members(match, exclude_user=None):
+    """
+    Get all confirmed members of a match (organizer + confirmed participants),
+    optionally excluding a specific user (e.g. the one who triggered the action).
+    Returns a set of User instances.
+    """
+    members = set()
+    if not match:
+        return members
+    if match.organizer:
+        members.add(match.organizer)
+    for p in match.participants.filter(status='confirmed').select_related('user'):
+        if p.user:
+            members.add(p.user)
+    if exclude_user:
+        members.discard(exclude_user)
+    return members
+
